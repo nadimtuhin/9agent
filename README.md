@@ -1,0 +1,84 @@
+# 9agent
+
+Universal 9Router agent launcher. Discover models from any OpenAI-compatible `/v1/models` endpoint, pick agent + model + mode interactively, launch.
+
+## Install
+
+```bash
+npm i -g 9agent
+```
+
+## Usage
+
+Interactive (prompts for agent → model → mode):
+```bash
+9agent
+```
+
+One-liner (skip all prompts):
+```bash
+9agent -a claude -m lc/LongCat-2.0 --yolo
+```
+
+### Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-a, --agent <name>` | Agent name or alias (`c`, `cc`, `p`, `h`) | interactive picker |
+| `-m, --model <id>` | Model ID | interactive search |
+| `--yolo` | Skip permissions / dangerous mode | safe |
+| `--gateway <url>` | 9Router base URL | `http://localhost:20128/v1` |
+| `--key <token>` | 9Router API key | `sk_9router` |
+| `--yes <mode>` | Non-interactive: `safe` or `dangerous` | — |
+| `--print-only` | Print resolved env+args, don't spawn | — |
+
+### Environment variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NINEROUTER_URL` | 9Router base URL | `http://localhost:20128/v1` |
+| `NINEROUTER_KEY` | 9Router API key | `sk_9router` |
+
+## Agents
+
+| Agent | Status | Notes |
+|-------|--------|-------|
+| **Claude Code** | ✅ Full | `--yolo` → `--dangerously-skip-permissions` |
+| **Pi** | ✅ Full | 9router-only (requires pre-seeded `~/.pi/agent/models.json`) |
+| **Hermes** | 🔲 Stub | Schema not verified yet — throws on launch |
+
+### How each adapter translates `--yolo`
+
+- **Claude**: adds `--dangerously-skip-permissions` to args
+- **Pi**: no-op (Pi has no built-in permission system; sandbox externally if needed)
+- **Hermes**: not implemented yet
+
+### How Pi gateway routing works
+
+Pi reads only provider API keys from environment variables — there is **no env var** to set an arbitrary provider base URL. The gateway must be pre-seeded in `~/.pi/agent/models.json`. If your 9router is already seeded (as with the `9pi` shell function), this just works.
+
+## Adding a 4th adapter
+
+Implement the `AgentAdapter` interface in `src/adapters/` and push to `REGISTRY` in `src/index.ts`:
+
+```typescript
+export const myAdapter: AgentAdapter = {
+  name: "my-agent",
+  aliases: ["ma"],
+  async detect() { return /* boolean */; },
+  async launch(opts: LaunchOptions) { /* spawn it */ },
+};
+```
+
+## Development
+
+```bash
+npm install
+npm run dev        # run with tsx
+npm run build      # compile to dist/
+node --test --import tsx src/__check.ts   # self-check (needs 9Router)
+```
+
+## Status
+
+v1: host runner only. Docker `--sandbox` is v2.
