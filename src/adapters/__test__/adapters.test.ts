@@ -1,0 +1,58 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { buildClaudeEnv, buildClaudeArgs } from "../claude.js";
+import { buildPiArgs } from "../pi.js";
+
+describe("claude adapter: buildClaudeEnv", () => {
+  it("maps all required env vars", () => {
+    const env = buildClaudeEnv({
+      model: "lc/LongCat-2.0",
+      baseUrl: "http://localhost:20128/v1",
+      apiKey: "sk_9router",
+    });
+    assert.equal(env.ANTHROPIC_BASE_URL, "http://localhost:20128/v1");
+    assert.equal(env.ANTHROPIC_AUTH_TOKEN, "sk_9router");
+    assert.equal(env.ANTHROPIC_DEFAULT_OPUS_MODEL, "lc/LongCat-2.0");
+    assert.equal(env.ANTHROPIC_DEFAULT_SONNET_MODEL, "lc/LongCat-2.0");
+    assert.equal(env.ANTHROPIC_DEFAULT_HAIKU_MODEL, "lc/LongCat-2.0");
+    assert.equal(env.CLAUDE_CODE_SUBAGENT_MODEL, "lc/LongCat-2.0");
+    assert.equal(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, "1");
+  });
+});
+
+describe("claude adapter: buildClaudeArgs", () => {
+  it("includes --dangerously-skip-permissions when yolo", () => {
+    const args = buildClaudeArgs({ yolo: true, extraArgs: ["--verbose"] });
+    assert.deepEqual(args, ["--dangerously-skip-permissions", "--verbose"]);
+  });
+  it("omits --dangerously-skip-permissions when safe", () => {
+    const args = buildClaudeArgs({ yolo: false, extraArgs: [] });
+    assert.deepEqual(args, []);
+  });
+});
+
+describe("pi adapter: buildPiArgs", () => {
+  it("includes provider and model", () => {
+    const args = buildPiArgs({
+      model: "lc/LongCat-2.0",
+      yolo: false,
+      extraArgs: [],
+    });
+    assert.deepEqual(args, ["--provider", "9router", "--model", "lc/LongCat-2.0"]);
+  });
+  it("passes through extraArgs", () => {
+    const args = buildPiArgs({
+      model: "m",
+      yolo: false,
+      extraArgs: ["--verbose", "--debug"],
+    });
+    assert.deepEqual(args, [
+      "--provider",
+      "9router",
+      "--model",
+      "m",
+      "--verbose",
+      "--debug",
+    ]);
+  });
+});
