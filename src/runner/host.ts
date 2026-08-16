@@ -14,9 +14,12 @@ export async function runHost(
   const child = spawn(bin, args, options);
   return new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code, _signal) => {
+    // ponytail: the launcher is a passthrough — mirror the child's fate, don't
+    // interpret it. Signals (Ctrl-C) exit silently; codes propagate verbatim.
+    child.on("exit", (code, signal) => {
+      if (signal) process.exit(signal === "SIGINT" ? 130 : 143);
       if (code === 0) resolve();
-      else reject(new Error(`${bin} exited with code ${code ?? "null"}`));
+      else process.exit(code ?? 1);
     });
   });
 }

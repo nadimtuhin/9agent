@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { discoverModels } from "./discovery.js";
+import { parseYes } from "./opts.js";
 import { REGISTRY } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { piAdapter } from "./adapters/pi.js";
@@ -24,7 +25,12 @@ program
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
   .action(async (opts) => {
-    await main(opts);
+    try {
+      await main(opts);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
   });
 
 interface ProgramOpts {
@@ -38,7 +44,7 @@ interface ProgramOpts {
   args: string[];
 }
 
-async function main(opts: any) {
+async function main(opts: ProgramOpts) {
   const options: ProgramOpts = {
     agent: opts.agent,
     model: opts.model,
@@ -61,6 +67,9 @@ async function main(opts: any) {
       console.error("No installed agents found. Install claude or pi first.");
       process.exit(1);
     }
+    if (!process.stdin.isTTY) {
+      throw new Error("No TTY — pass --agent <name> to pick an agent.");
+    }
     const answer = await select({
       message: "Pick an agent:",
       choices: installed.map((a) => ({
@@ -68,7 +77,6 @@ async function main(opts: any) {
         value: a,
         description: a.aliases?.length ? `aliases: ${a.aliases.join(", ")}` : undefined,
       })),
-      default: "claude",
     });
     adapter = answer;
   }
@@ -77,6 +85,9 @@ async function main(opts: any) {
   const models = await discoverModels(options.gateway, options.key);
   let model = options.model;
   if (!model) {
+    if (!process.stdin.isTTY) {
+      throw new Error("No TTY — pass --model <id> to pick a model.");
+    }
     const answer = await search<string>({
       message: "Pick a model:",
       source: async (input, _choices) => {
@@ -105,10 +116,8 @@ async function main(opts: any) {
       ],
     });
     yolo = mode;
-  } else if (options.yes === "dangerous") {
-    yolo = true;
-  } else if (options.yes === "safe") {
-    yolo = false;
+  } else if (options.yes !== undefined) {
+    yolo = parseYes(options.yes);
   }
 
   const launchOpts: LaunchOptions = {
