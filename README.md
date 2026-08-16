@@ -191,7 +191,8 @@ export const myAdapter: AgentAdapter = {
 npm install
 npm run dev        # run with tsx
 npm run build      # compile to dist/
-node --test --import tsx src/__check.ts   # self-check (needs 9Router)
+npm run check      # typecheck, build, unit tests
+npm run test:docker # integration harness (needs Docker)
 ```
 
 ## Status

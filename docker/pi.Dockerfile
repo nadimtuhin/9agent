@@ -9,7 +9,7 @@ RUN apt-get update \
 
 # Pinned: a floating version would leave the cache key unchanged while the
 # contents drifted. Bump to upgrade.
-RUN npm install -g @earendil-works/pi-coding-agent@latest
+RUN npm install -g @earendil-works/pi-coding-agent@0.84.2
 
 USER node
 WORKDIR /workspace
