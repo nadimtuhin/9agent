@@ -9,29 +9,34 @@ export interface ModelEntry {
   max_tokens?: number;
 }
 
-const CACHE_PATH = join(homedir(), ".config", "9agent", "models.json");
+export const CACHE_PATH = join(homedir(), ".config", "9agent", "models.json");
 
-function readCache(): ModelEntry[] | null {
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
-    if (!Array.isArray(parsed)) return null;
-    const ok = parsed.every(
+export function isModelEntryArray(x: unknown): x is ModelEntry[] {
+  return (
+    Array.isArray(x) &&
+    x.every(
       (m) =>
         typeof m === "object" &&
         m !== null &&
         typeof (m as ModelEntry).id === "string" &&
         typeof (m as ModelEntry).owned_by === "string",
-    );
-    return ok ? (parsed as ModelEntry[]) : null;
+    )
+  );
+}
+
+function readCache(path: string): ModelEntry[] | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
+    return isModelEntryArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
 }
 
-function writeCache(models: ModelEntry[]): void {
+function writeCache(path: string, models: ModelEntry[]): void {
   try {
-    mkdirSync(join(CACHE_PATH, ".."), { recursive: true });
-    writeFileSync(CACHE_PATH, JSON.stringify(models, null, 2), "utf-8");
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, JSON.stringify(models, null, 2), "utf-8");
   } catch {
     // Best-effort — never block launch on cache write
   }
@@ -40,34 +45,51 @@ function writeCache(models: ModelEntry[]): void {
 export async function discoverModels(
   baseUrl: string,
   apiKey: string,
+  cachePath: string = CACHE_PATH,
 ): Promise<ModelEntry[]> {
-  // ponytail: only a transport/HTTP failure means "offline". A bad payload is a
-  // real bug and must not be masked by serving stale cache.
+  // ponytail: only a transport failure means "offline". An HTTP status (401, 500)
+  // or a bad payload is a real error and must surface, not be masked by cache.
   let res: Response;
   try {
     res = await fetch(`${baseUrl}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
   } catch {
-    const cached = readCache();
-    if (cached) return cached;
+    const cached = readCache(cachePath);
+    if (cached) {
+      console.error(
+        `9agent: cannot reach ${baseUrl}/models — serving ${cached.length} models from cache at ${cachePath}. It may be stale.`,
+      );
+      return cached;
+    }
     throw new Error(
-      `Cannot reach ${baseUrl}/models and no cached models at ${CACHE_PATH}. Is 9Router running?`,
+      `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
     );
   }
 
-  const body = (await res.json()) as { data?: ModelEntry[] };
-  if (!Array.isArray(body.data)) {
-    throw new Error(`${baseUrl}/models returned no 'data' array`);
+  if (!res.ok) {
+    throw new Error(`${baseUrl}/models returned HTTP ${res.status}`);
   }
-  const models = body.data.map((m) => ({
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(`${baseUrl}/models returned invalid JSON`);
+  }
+
+  const data = (body as { data?: unknown })?.data;
+  if (!isModelEntryArray(data)) {
+    throw new Error(`${baseUrl}/models returned no valid 'data' array`);
+  }
+
+  const models = data.map((m) => ({
     id: m.id,
     owned_by: m.owned_by,
     ...("context_window" in m ? { context_window: m.context_window } : {}),
     ...("max_tokens" in m ? { max_tokens: m.max_tokens } : {}),
   }));
 
-  writeCache(models);
+  writeCache(cachePath, models);
   return models;
 }
