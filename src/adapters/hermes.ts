@@ -1,7 +1,16 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
+import {
+  hermesCheckout,
+  hermesSpec,
+  resolveImage,
+  runSandbox,
+  writeShadowConfig,
+} from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,14 +35,9 @@ export function buildHermesArgs(opts: {
 export const hermesAdapter: AgentAdapter = {
   name: "hermes",
   aliases: ["h"],
-  // Upstream blocks pip/wheel installs and ships its own Docker image with a
-  // different container contract (entrypoint dispatcher, /init as PID 1).
-  supportsSandbox: false,
-  sandboxRefusal:
-    "hermes: 9agent cannot sandbox hermes. Upstream refuses pip/wheel installs " +
-    "(\"Hermes is distributed via the shell installer, Docker image, or Nix\") and ships " +
-    "its own image with a different entrypoint contract. Use hermes' own " +
-    "docker-compose.yml in ~/.hermes/hermes-agent, or run without --sandbox.",
+  // Sandboxed by building upstream's own image from the local checkout — they
+  // block pip/wheel installs, so a Dockerfile of ours could never work.
+  supportsSandbox: true,
   async detect() {
     try {
       await execFileAsync("which", ["hermes"]);
@@ -46,12 +50,35 @@ export const hermesAdapter: AgentAdapter = {
     const args = buildHermesArgs(opts);
 
     if (opts.sandbox) {
-      throw new Error(
-        "hermes: 9agent cannot sandbox hermes. Upstream refuses pip/wheel installs " +
-          "(\"Hermes is distributed via the shell installer, Docker image, or Nix\") and " +
-          "ships its own image with a different entrypoint contract. Use hermes' own " +
-          "docker-compose.yml in ~/.hermes/hermes-agent, or run without --sandbox.",
-      );
+      const spec = hermesSpec();
+      if (!existsSync(spec.dockerfile)) {
+        throw new Error(
+          `hermes: --sandbox needs hermes' own checkout at ${hermesCheckout()} — ` +
+            `upstream blocks pip installs, so their Dockerfile is the only way to ` +
+            `build the image. Clone it there, or run without --sandbox.`,
+        );
+      }
+      // Hermes routes via config.yaml, so the container needs a copy whose
+      // provider URLs point at the host. The user's own file is only ever read.
+      const source = join(spec.agentHome, "config.yaml");
+      if (!existsSync(source)) {
+        throw new Error(
+          `hermes: --sandbox needs ${source}, which does not exist. Define your 9router provider first.`,
+        );
+      }
+      const shadow = writeShadowConfig("hermes", "config.yaml", source);
+      const mount = `${shadow}:${spec.containerHome}/config.yaml:ro`;
+
+      if (opts.dryRun) {
+        console.error("--- hermes sandbox dry run ---");
+        console.error("shadow config:", shadow);
+        console.error("image:", resolveImage(spec));
+        console.error("args:", args);
+        return;
+      }
+      console.error(`hermes: launching sandboxed with model=${opts.model}`);
+      await runSandbox(spec, "hermes", args, {}, [mount]);
+      return;
     }
 
     // Warn before the dry-run guard: --print-only is how users inspect a launch,

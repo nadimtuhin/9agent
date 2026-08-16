@@ -54,11 +54,11 @@ whether they were meant for the agent or for itself.
 9agent -a claude -m lc/LongCat-2.0 --yes safe --sandbox
 ```
 
-The image is built on first use (~60s) and cached. Its tag is a hash of
+The image is built on first use and cached. Its tag is a hash of
 `docker/claude.Dockerfile`, so editing that file rebuilds automatically — there is
 no version to bump and no stale-image trap.
 
-Supported for **claude** and **pi**. Each gets its own image.
+Supported for **every** agent — claude, pi, and hermes. Each gets its own image.
 
 Pi routes through `~/.pi/agent/models.json` rather than env vars, so 9agent writes
 a **shadow config** — a rewritten copy under `~/.cache/9agent/sandbox/` whose
@@ -66,12 +66,20 @@ gateway points at the container host — and mounts it read-only. Your own
 `models.json` is opened for reading and never written
 ([ADR-0001](docs/adr/0001-launcher-not-session-manager.md)).
 
-**hermes is not supported.** Upstream refuses pip and wheel installs outright
-(*"Hermes is distributed via the shell installer, Docker image, or Nix"*) and
-ships its own image with a different entrypoint contract — `/init` as PID 1 and a
-dispatcher — which does not fit the uniform argv model the other agents use. Use
-hermes' own `docker-compose.yml`. `9agent -a hermes --sandbox` **errors** and says
-this, rather than silently running unsandboxed.
+Hermes gets the same shadow-config treatment on `~/.hermes/config.yaml`, but is
+built differently: upstream refuses pip and wheel installs (*"Hermes is
+distributed via the shell installer, Docker image, or Nix"*), so 9agent builds
+**their** image from **their** checkout at `~/.hermes/hermes-agent`. That first
+build takes several minutes. If the checkout is missing, `--sandbox` **errors**
+and says so rather than silently running unsandboxed.
+
+Their image also imposes its own container contract, which 9agent honours: no
+`--user` (their wrapper rejects an arbitrary UID — it takes `HERMES_UID`/
+`HERMES_GID` instead), and `$HOME` is `/opt/data`, not `/home/node`.
+
+Symlinks in an agent's home that point *outside* it — `~/.hermes/SOUL.md ->
+~/.claude/persona-core.md`, say — are bind-mounted at their targets, read-only.
+A bind mount copies the link verbatim, so without this they arrive dangling.
 
 ### What the sandbox does and does not protect
 
@@ -164,4 +172,4 @@ node --test --import tsx src/__check.ts   # self-check (needs 9Router)
 
 ## Status
 
-Host runner, plus Docker `--sandbox` for claude (see [Sandbox](#sandbox)).
+Host runner, plus Docker `--sandbox` for every agent (see [Sandbox](#sandbox)).

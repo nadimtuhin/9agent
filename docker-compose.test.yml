@@ -27,8 +27,8 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
-  # --sandbox must be refused, not silently ignored, for an agent that cannot honour it
-  test-sandbox-refused:
+  # a missing sandbox prerequisite must be an error, never a silent unsandboxed run
+  test-sandbox-no-checkout:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent hermes --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox

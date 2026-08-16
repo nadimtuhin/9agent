@@ -28,12 +28,13 @@ grep -q "host.docker.internal:host-gateway" <<<"$out" || { echo "FAIL: sandbox a
 grep -q "ANTHROPIC_BASE_URL=http://mock-router:20128/v1" <<<"$out" || { echo "FAIL: non-loopback gateway was rewritten"; exit 1; }
 grep -q "ANTHROPIC_AUTH_TOKEN=…redacted" <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
 
-# --sandbox on an agent that cannot honour it must ERROR, never run unsandboxed
-if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-sandbox-refused test-sandbox-refused 2>&1); then
+# --sandbox with a missing prerequisite must ERROR, never fall back to unsandboxed.
+# hermes can only be built from its own checkout, which is absent in here.
+if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-sandbox-no-checkout test-sandbox-no-checkout 2>&1); then
   echo "$out"; echo "FAIL: hermes --sandbox should have exited non-zero"; exit 1
 fi
 echo "$out"
-grep -q "cannot sandbox hermes" <<<"$out" || { echo "FAIL: hermes --sandbox failed for the wrong reason"; exit 1; }
+grep -q "needs hermes' own checkout" <<<"$out" || { echo "FAIL: hermes --sandbox failed for the wrong reason"; exit 1; }
 
 # expected to FAIL with a specific, readable message — not hang, not a build error
 if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-no-tty test-no-tty 2>&1); then
