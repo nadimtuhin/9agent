@@ -146,7 +146,15 @@ export async function ensureImage(spec: SandboxSpec, image: string): Promise<voi
   try {
     await execFileAsync("docker", ["image", "inspect", image]);
     return; // cache hit
-  } catch {
+  } catch (err) {
+    // Distinguish "docker is missing" from "image not built yet" — otherwise the
+    // most likely first-run failure surfaces as a raw `spawn docker ENOENT`.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(
+        "9agent: --sandbox needs Docker, but no `docker` command was found. " +
+          "Install Docker, or drop --sandbox to run on the host.",
+      );
+    }
     // not built yet — fall through
   }
 

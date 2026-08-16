@@ -1,8 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import {
   assertMountableCwd,
+  claudeSpec,
   buildSandboxArgs,
   containerizeUrl,
   imageTag,
@@ -83,6 +85,17 @@ describe("imageTag", () => {
   it("is stable for identical contents", () => {
     assert.equal(imageTag("FROM node:22-slim"), imageTag("FROM node:22-slim"));
   });
+  it("is long enough that the tag is not collision-bait", () => {
+    assert.equal(imageTag("x").length, 12);
+  });
+});
+
+describe("claudeSpec", () => {
+  it("points at a Dockerfile that exists", () => {
+    // Guards the failure mode that works in dev and breaks for installed users:
+    // the path is derived from import.meta.url and depends on rootDir staying src.
+    assert.ok(existsSync(claudeSpec().dockerfile), claudeSpec().dockerfile);
+  });
 });
 
 describe("buildSandboxArgs", () => {
@@ -125,13 +138,26 @@ describe("buildSandboxArgs", () => {
   });
 
   it("mounts cwd and the agent home, and gitconfig only when present", () => {
-    const argv = buildSandboxArgs(base).join(" ");
-    assert.match(argv, /-v \/work\/proj:\/workspace/);
-    assert.match(argv, /-v \/home\/u\/\.claude:\/home\/node\/\.claude/);
-    assert.ok(!argv.includes(".gitconfig"));
+    // Exact argv elements, not a regex over a join: a substring match also passes
+    // when an option is appended, so `/workspace:ro` would slip through.
+    const argv = buildSandboxArgs(base);
+    assert.ok(argv.includes("/work/proj:/workspace"));
+    assert.ok(argv.includes("/home/u/.claude:/home/node/.claude"));
+    assert.ok(!argv.join(" ").includes(".gitconfig"));
 
-    const withGit = buildSandboxArgs({ ...base, gitconfig: "/home/u/.gitconfig" }).join(" ");
-    assert.match(withGit, /-v \/home\/u\/\.gitconfig:\/home\/node\/\.gitconfig:ro/);
+    const withGit = buildSandboxArgs({ ...base, gitconfig: "/home/u/.gitconfig" });
+    assert.ok(withGit.includes("/home/u/.gitconfig:/home/node/.gitconfig:ro"));
+  });
+
+  it("keeps the workspace writable and the container disposable", () => {
+    // A read-only workspace makes the sandbox useless; a missing --rm leaks
+    // a container per launch. Both survived mutation before this test existed.
+    const argv = buildSandboxArgs(base);
+    assert.ok(argv.includes("--rm"));
+    assert.ok(!argv.some((a) => a.endsWith("/workspace:ro")));
+    const userAt = argv.indexOf("--user");
+    assert.notEqual(userAt, -1);
+    assert.equal(argv[userAt + 1], "node");
   });
 
   it("never bind-mounts host binaries", () => {
