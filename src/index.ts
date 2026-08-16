@@ -24,9 +24,10 @@ program
   .option("--key <token>", "9Router API key", process.env.NINEROUTER_KEY ?? "sk_9router")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
-  .action(async (opts) => {
+  .argument("[args...]", "extra args passed through to the agent")
+  .action(async (args: string[], opts: Omit<ProgramOpts, "args">) => {
     try {
-      await main(opts);
+      await main({ ...opts, args });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -60,6 +61,12 @@ async function main(opts: ProgramOpts) {
   let adapter = REGISTRY.find(
     (a) => a.name === options.agent || a.aliases?.includes(options.agent ?? ""),
   );
+
+  if (!adapter && options.agent) {
+    throw new Error(
+      `Unknown agent '${options.agent}'. Known: ${REGISTRY.map((a) => a.name).join(", ")}.`,
+    );
+  }
 
   if (!adapter) {
     const installed = await filterInstalled(REGISTRY);

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
+import os from "node:os";
 
 export async function runHost(
   bin: string,
@@ -17,7 +18,7 @@ export async function runHost(
     // ponytail: the launcher is a passthrough — mirror the child's fate, don't
     // interpret it. Signals (Ctrl-C) exit silently; codes propagate verbatim.
     child.on("exit", (code, signal) => {
-      if (signal) process.exit(signal === "SIGINT" ? 130 : 143);
+      if (signal) process.exit(128 + (os.constants.signals[signal] ?? 15));
       if (code === 0) resolve();
       else process.exit(code ?? 1);
     });
