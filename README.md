@@ -45,13 +45,13 @@ One-liner (skip all prompts):
 |-------|--------|-------|
 | **Claude Code** | ✅ Full | `--yolo` → `--dangerously-skip-permissions` |
 | **Pi** | ✅ Full | 9router-only (requires pre-seeded `~/.pi/agent/models.json`) |
-| **Hermes** | 🔲 Stub | Schema not verified yet — throws on launch |
+| **Hermes** | ✅ Full | 9router-only (requires a `9router` provider in `~/.hermes/config.yaml`) |
 
 ### How each adapter translates `--yolo`
 
 - **Claude**: adds `--dangerously-skip-permissions` to args
 - **Pi**: no-op (Pi has no built-in permission system; sandbox externally if needed)
-- **Hermes**: not implemented yet
+- **Hermes**: adds `--yolo` (note: `--safe-mode` is *not* the inverse — it disables customizations; safe mode is simply omitting `--yolo`)
 
 ### How Pi gateway routing works
 
