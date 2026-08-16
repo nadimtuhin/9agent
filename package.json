@@ -1,6 +1,6 @@
 {
   "name": "9agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Universal 9Router agent launcher — discover models, pick agent, launch.",
   "license": "MIT",
   "author": "Omar Faruque Tuhin",
@@ -20,6 +20,7 @@
     "claude",
     "launcher"
   ],
+  "main": "dist/index.js",
   "type": "module",
   "bin": {
     "9agent": "bin/9agent.js"
@@ -27,7 +28,9 @@
   "files": [
     "dist",
     "bin",
-    "docker"
+    "docker",
+    "CHANGELOG.md",
+    "CONTEXT.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -35,7 +38,8 @@
     "test:docker": "bash test/run-docker-tests.sh",
     "test": "node --test --import tsx src/adapters/__test__/*.test.ts",
     "prepack": "npm run build",
-    "check": "bash scripts/checks.sh"
+    "check": "bash scripts/checks.sh",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "commander": "^13.0.0",
