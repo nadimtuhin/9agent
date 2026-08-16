@@ -99,6 +99,9 @@ Does **not** protect:
 - The agent version is **pinned in `docker/claude.Dockerfile`**. That is what makes
   the image tag a real content identity — a floating version would leave the cache
   key unchanged while the contents drifted. Bump the pin to upgrade.
+- Your host `settings.json` is mounted in, so hooks configured there are attempted
+  inside the container. Any that point at a host binary path will fail with
+  `not found` on stderr — noisy but harmless, since a missing binary cannot run.
 - Verified on macOS (OrbStack/Docker Desktop). On Linux, a host UID other than 1000
   may produce wrong ownership on both `/workspace` and `~/.claude` — untested, so
   unclaimed.
