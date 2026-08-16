@@ -76,7 +76,7 @@ export const piAdapter: AgentAdapter = {
 
     if (opts.yolo) {
       console.error(
-        "pi: --yolo is a no-op; Pi has no built-in permission system. Run sandboxed externally if needed.",
+        "pi: --yolo is a no-op; Pi has no built-in permission system. Pass --sandbox to bound the blast radius.",
       );
     }
 
