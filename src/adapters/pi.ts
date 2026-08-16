@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
@@ -7,6 +7,33 @@ import { runHost } from "../runner/host.js";
 import { piSpec, resolveImage, runSandbox, writeShadowConfig } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Whether pi's own config knows this model id.
+ *
+ * 9agent offers every model the Gateway serves; pi only knows what is listed in
+ * models.json, and silently falls back to default context limits for anything
+ * else. Routing still works — the id passes through to 9Router — but pi is
+ * guessing at contextWindow, maxTokens, and image support.
+ *
+ * Read-only by design: warn, never rewrite the user's file (ADR-0001).
+ * `undefined` means "cannot tell", which must not produce a warning.
+ */
+export function piKnowsModel(configText: string, model: string): boolean | undefined {
+  let ids: string[];
+  try {
+    const cfg = JSON.parse(configText) as {
+      providers?: Record<string, { models?: { id?: string }[] }>;
+    };
+    ids = Object.values(cfg.providers ?? {}).flatMap((p) =>
+      (p.models ?? []).map((m) => m.id ?? ""),
+    );
+  } catch {
+    return undefined; // malformed config is pi's problem to report, not ours
+  }
+  if (ids.length === 0) return undefined;
+  return ids.includes(model);
+}
 
 export function buildPiArgs(opts: {
   model: string;
@@ -30,6 +57,19 @@ export const piAdapter: AgentAdapter = {
   },
   async launch(opts: LaunchOptions) {
     const args = buildPiArgs(opts);
+
+    // Warn before the dry-run guard: --print-only must show every warning a
+    // real launch would print.
+    const modelsJson = join(piSpec().agentHome, "agent", "models.json");
+    if (existsSync(modelsJson)) {
+      const known = piKnowsModel(readFileSync(modelsJson, "utf-8"), opts.model);
+      if (known === false) {
+        console.error(
+          `pi: ${opts.model} is not listed in ${modelsJson}, so pi will treat it as a ` +
+            `custom id and guess its context limits. Routing still works. Add it there to fix the limits.`,
+        );
+      }
+    }
 
     if (opts.sandbox) {
       // Pi routes via models.json, so the container needs a copy whose gateway

@@ -19,7 +19,9 @@ check() {
 echo "9agent checks"
 
 check "typecheck (src + tests)" npx tsc --noEmit
-check "build emits" npx tsc -p tsconfig.build.json --noEmit
+# Must actually emit: with --noEmit this passed while dist/ was stale, which is
+# the exact trap the build config exists to close.
+check "build emits" npx tsc -p tsconfig.build.json
 check "unit tests" npm test
 
 # Regression guard: excluding __test__ from tsconfig.json once silently left the
