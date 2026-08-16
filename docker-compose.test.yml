@@ -21,3 +21,17 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent claude --gateway http://mock-router:20128/v1 --yes safe
+  # actually reaches runHost: a stub agent that exits 7 must make 9agent exit 7
+  test-exit-code:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        printf '#!/bin/sh\nexit 7\n' > /usr/local/bin/claude &&
+        chmod +x /usr/local/bin/claude &&
+        node dist/index.js --agent claude --model mock/claude-sonnet-4-6
+        --gateway http://mock-router:20128/v1 --yes safe;
+        c=$$?;
+        echo "9agent exited $$c";
+        [ "$$c" = "7" ]
