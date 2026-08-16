@@ -69,7 +69,7 @@ whether they were meant for the agent or for itself.
 | `-m, --model <id>` | Model ID | interactive search |
 | `--yolo` | Skip permissions / dangerous mode | safe |
 | `--gateway <url>` | 9Router base URL | `http://localhost:20128/v1` |
-| `--key <token>` | 9Router API key | `sk_9router` |
+| `--key <token>` | 9Router API key — `sk_9router` is a placeholder for a local gateway, not a real credential | `sk_9router` |
 | `--yes <mode>` | Non-interactive: `safe` or `dangerous` | — |
 | `--print-only` | Print resolved env+args, don't spawn | — |
 | `--sandbox` | Run the agent in a Docker container | host |
