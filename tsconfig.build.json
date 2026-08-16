@@ -3,7 +3,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "src/__check.ts",
     "src/adapters/__test__"
   ]
 }

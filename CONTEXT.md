@@ -51,6 +51,22 @@ Whether the Session may act without asking: `safe` or `dangerous`. A real domain
 concept, not a passthrough flag. An Adapter whose Agent cannot honour it must say
 so out loud rather than silently accepting the request.
 
+## Sandbox
+
+A Session that runs inside a container instead of on the host. It is a property of
+*how* a Session is spawned, not a different kind of Session: the exit code still
+propagates unchanged, and 9agent still does nothing after exec.
+
+A **blast-radius limiter, not a security boundary.** It bounds what a confused or
+runaway Agent can destroy — the rest of your filesystem, global system state — and
+does not defend against a hostile one, which holds your credentials and has full
+network access from inside.
+
+*Not* available for every Agent. An Agent whose Gateway is injected through a
+config file cannot be sandboxed without editing a file the user owns, so its
+Adapter refuses rather than running unsandboxed. Refusing is the honest failure;
+silently ignoring a security-shaped flag is the dangerous one.
+
 ## Gateway
 
 The OpenAI-compatible 9Router endpoint that serves the model list and proxies
