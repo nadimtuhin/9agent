@@ -16,6 +16,11 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent pi --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  # a mismatched --gateway must warn even under --print-only
+  test-hermes:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent hermes --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
   # no --model on a non-TTY: must fail fast with a readable message, not hang
   test-no-tty:
     build: .

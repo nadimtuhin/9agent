@@ -57,10 +57,28 @@ describe("discoverModels", () => {
     assert.deepEqual(models, [{ id: "live/model", owned_by: "live" }]);
   });
 
-  it("falls back to cache only on transport failure", async () => {
+  it("falls back to cache only on transport failure, and says so", async () => {
     writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }]));
-    const models = await discoverModels("http://127.0.0.1:1/v1", "k", cache);
-    assert.deepEqual(models, [{ id: "cached/model", owned_by: "cache" }]);
+    const warnings: string[] = [];
+    const original = console.error;
+    console.error = (msg: unknown) => void warnings.push(String(msg));
+    try {
+      const models = await discoverModels("http://127.0.0.1:1/v1", "k", cache);
+      assert.deepEqual(models, [{ id: "cached/model", owned_by: "cache" }]);
+    } finally {
+      console.error = original;
+    }
+    // CONTEXT.md makes announcing a cache hit a domain requirement.
+    assert.match(warnings.join("\n"), /from cache/);
+  });
+
+  it("treats an empty cache as no cache", async () => {
+    const empty = join(CACHE_DIR, "empty.json");
+    writeFileSync(empty, "[]");
+    await assert.rejects(
+      () => discoverModels("http://127.0.0.1:1/v1", "k", empty),
+      /no cached models/,
+    );
   });
 
   it("ignores a malformed cache", async () => {

@@ -56,7 +56,9 @@ export async function discoverModels(
     });
   } catch {
     const cached = readCache(cachePath);
-    if (cached) {
+    // An empty cache is not a usable answer — it would open an empty picker
+    // instead of telling the user the gateway is unreachable.
+    if (cached && cached.length > 0) {
       console.error(
         `9agent: cannot reach ${baseUrl}/models — serving ${cached.length} models from cache at ${cachePath}. It may be stale.`,
       );

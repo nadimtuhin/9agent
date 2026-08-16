@@ -113,6 +113,9 @@ async function main(opts: ProgramOpts) {
   }
 
   // 3. Pick mode
+  if (options.yolo && options.yes === "safe") {
+    throw new Error("--yolo and --yes safe contradict each other; pass one.");
+  }
   let yolo = options.yolo;
   if (!yolo && !options.yes && process.stdin.isTTY) {
     const mode = await select({

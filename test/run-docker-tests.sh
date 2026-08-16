@@ -6,7 +6,7 @@ docker compose -f docker-compose.test.yml build
 # The image seeds a 'stale/never-use-me' cache, so these services must reach the
 # router for real: any cache fallback announces itself and fails the run here.
 # (--model is passed explicitly, so the model id alone proves nothing.)
-for svc in test-claude test-pi; do
+for svc in test-claude test-pi test-hermes; do
   out=$(docker compose -f docker-compose.test.yml up --exit-code-from "$svc" "$svc" 2>&1) || rc=$?
   echo "$out"
   [ "${rc:-0}" = "0" ] || { echo "FAIL: $svc exited ${rc}"; exit 1; }

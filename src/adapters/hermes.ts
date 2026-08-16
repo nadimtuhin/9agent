@@ -37,13 +37,8 @@ export const hermesAdapter: AgentAdapter = {
   async launch(opts: LaunchOptions) {
     const args = buildHermesArgs(opts);
 
-    if (opts.dryRun) {
-      console.error("--- hermes dry run ---");
-      console.error("args:", args);
-      console.error("(hermes routes via the '9router' provider in ~/.hermes/config.yaml)");
-      return;
-    }
-
+    // Warn before the dry-run guard: --print-only is how users inspect a launch,
+    // so it must show every warning the real launch would print.
     // The user owns config.yaml — warn on mismatch, never rewrite it.
     const expected = "http://localhost:20128/v1";
     if (opts.baseUrl !== expected) {
@@ -51,12 +46,16 @@ export const hermesAdapter: AgentAdapter = {
         `hermes: base URL is ${opts.baseUrl}, but routing comes from the '9router' provider in ~/.hermes/config.yaml. Edit that file yourself if it disagrees.`,
       );
     }
-    if (opts.apiKey !== "no-key-needed") {
-      console.error(
-        `hermes: ~/.hermes/config.yaml conventionally uses api_key: no-key-needed while claude/pi use sk_9router. 9agent does not reconcile this — check your config if auth fails.`,
-      );
+
+    if (opts.dryRun) {
+      console.error("--- hermes dry run ---");
+      console.error("args:", args);
+      console.error("(hermes routes via the '9router' provider in ~/.hermes/config.yaml)");
+      return;
     }
 
+    // ponytail: no api-key warning. --provider 9router means hermes reads its key
+    // from its own config, and the empty env below never carries opts.apiKey.
     await runHost("hermes", args, {});
   },
 };

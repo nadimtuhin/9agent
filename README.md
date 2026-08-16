@@ -20,6 +20,19 @@ One-liner (skip all prompts):
 9agent -a claude -m lc/LongCat-2.0 --yolo
 ```
 
+### Passing arguments through to the agent
+
+Anything after `--` goes to the agent verbatim, like `"$@"` in the `9claude`/`9pi`
+shell functions:
+
+```bash
+9agent -a claude -m lc/LongCat-2.0 --yes safe -- --verbose
+```
+
+The `--` is required for agent-bound *flags*; bare words need no separator.
+Without it, `9agent` rejects flags it does not recognise rather than guessing
+whether they were meant for the agent or for itself.
+
 ### Flags
 
 | Flag | Description | Default |

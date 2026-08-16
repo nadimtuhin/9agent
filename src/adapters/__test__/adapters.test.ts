@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildClaudeEnv, buildClaudeArgs } from "../claude.js";
 import { buildPiArgs } from "../pi.js";
+import { buildHermesArgs } from "../hermes.js";
 
 describe("claude adapter: buildClaudeEnv", () => {
   it("maps all required env vars", () => {
@@ -53,6 +54,29 @@ describe("pi adapter: buildPiArgs", () => {
       "m",
       "--verbose",
       "--debug",
+    ]);
+  });
+});
+
+describe("hermes adapter: buildHermesArgs", () => {
+  it("routes via the 9router provider", () => {
+    const args = buildHermesArgs({ model: "lc/LongCat-2.0", yolo: false, extraArgs: [] });
+    assert.deepEqual(args, ["chat", "-m", "lc/LongCat-2.0", "--provider", "9router"]);
+  });
+  it("adds --yolo only in dangerous mode", () => {
+    const args = buildHermesArgs({ model: "m", yolo: true, extraArgs: [] });
+    assert.deepEqual(args, ["chat", "-m", "m", "--provider", "9router", "--yolo"]);
+  });
+  it("appends extraArgs after --yolo", () => {
+    const args = buildHermesArgs({ model: "m", yolo: true, extraArgs: ["--verbose"] });
+    assert.deepEqual(args, [
+      "chat",
+      "-m",
+      "m",
+      "--provider",
+      "9router",
+      "--yolo",
+      "--verbose",
     ]);
   });
 });
