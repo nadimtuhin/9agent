@@ -1,0 +1,23 @@
+services:
+  mock-router:
+    image: node:20-alpine
+    command: node test/mock-router.cjs
+    volumes: [.:/app]
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:20128/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 1s
+      retries: 5
+  test-claude:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-pi:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent pi --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  # no --model on a non-TTY: must fail fast with a readable message, not hang
+  test-no-tty:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent claude --gateway http://mock-router:20128/v1 --yes safe
