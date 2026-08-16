@@ -11,6 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "src/__check.ts", "src/adapters/__test__"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
