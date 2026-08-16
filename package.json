@@ -1,15 +1,39 @@
 {
   "name": "9agent",
   "version": "0.1.0",
-  "description": "Universal 9Router agent launcher — discover models, pick agent, launch.",
+  "description": "Universal 9Router agent launcher \u2014 discover models, pick agent, launch.",
+  "license": "MIT",
+  "author": "Omar Faruque Tuhin",
+  "homepage": "https://github.com/nadimtuhin/9agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nadimtuhin/9agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nadimtuhin/9agent/issues"
+  },
+  "keywords": [
+    "9router",
+    "cli",
+    "llm",
+    "agent",
+    "claude",
+    "launcher"
+  ],
   "type": "module",
   "bin": {
     "9agent": "bin/9agent.js"
   },
+  "files": [
+    "dist",
+    "bin"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:docker": "bash test/run-docker-tests.sh",
+    "test": "node --test --import tsx src/adapters/__test__/*.test.ts"
   },
   "dependencies": {
     "commander": "^13.0.0",
