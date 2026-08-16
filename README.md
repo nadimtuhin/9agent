@@ -70,25 +70,38 @@ It is a **blast-radius limiter, not a security boundary against a hostile agent.
 
 Protects:
 - The rest of your filesystem — a runaway `rm -rf` hits `/workspace` and the
-  mounted agent home, not `~/Documents`, `~/.ssh`, or your other repos.
+  mounted agent home, not `~/Documents`, `~/.ssh`, or your other repos. 9agent
+  **refuses to run** if your cwd is `/` or your home directory, since mounting
+  either would make that promise false.
+- **Your host's hooks.** `~/.claude/settings.json`, `settings.local.json`,
+  `CLAUDE.md`, `hooks/`, and `plugins/` are mounted **read-only**. Without that, an
+  agent in the sandbox could write itself a hook that runs on your host the next
+  time you start Claude Code — which would make the sandbox decorative.
 - Global system state — `npm install -g`, `apt`, and friends are discarded on exit.
 - Host process space — the agent cannot signal or inspect host processes.
 
 Does **not** protect:
 - **Your working directory.** Mounted read-write by design; a sandbox that cannot
   edit your code is useless.
-- **Your credentials.** `~/.claude` is mounted read-write and holds your tokens.
+- **The rest of `~/.claude`.** Mounted read-write, and it holds your OAuth tokens
+  and session history. The executable surface above is locked down; the
+  credentials are not.
 - **The network.** Full outbound access, including your host's loopback — every
   other local service and dev server is reachable.
-- **The gateway key.** Passed as an env var, visible to `docker inspect`.
+- **The gateway key.** Passed as an env var, so it is visible to anything that can
+  talk to your Docker socket (which is already root-equivalent on the host).
 
 ### Known limits
 
 - Exit codes **125–127** are ambiguous in sandbox mode: Docker uses them for its
   own failures, so they cannot be distinguished from an agent that exits 125–127.
   Every other code, including signal deaths (`128 + signum`), passes through exactly.
-- Verified on macOS (OrbStack/Docker Desktop). On Linux, a host UID other than
-  1000 may produce wrong ownership on `/workspace` — untested, so unclaimed.
+- The agent version is **pinned in `docker/claude.Dockerfile`**. That is what makes
+  the image tag a real content identity — a floating version would leave the cache
+  key unchanged while the contents drifted. Bump the pin to upgrade.
+- Verified on macOS (OrbStack/Docker Desktop). On Linux, a host UID other than 1000
+  may produce wrong ownership on both `/workspace` and `~/.claude` — untested, so
+  unclaimed.
 
 ### Environment variables
 

@@ -7,6 +7,7 @@ import {
   claudeSpec,
   containerizeUrl,
   gitconfigIfPresent,
+  readOnlyPathsIn,
   resolveImage,
   runSandbox,
 } from "../runner/sandbox.js";
@@ -17,7 +18,7 @@ const execFileAsync = promisify(execFile);
 export function redactSecrets(env: Record<string, string>): Record<string, string> {
   const safe = { ...env };
   if (safe.ANTHROPIC_AUTH_TOKEN) {
-    safe.ANTHROPIC_AUTH_TOKEN = `${safe.ANTHROPIC_AUTH_TOKEN.slice(0, 5)}…redacted`;
+    safe.ANTHROPIC_AUTH_TOKEN = "…redacted";
   }
   return safe;
 }
@@ -55,6 +56,7 @@ export function buildClaudeArgs(opts: ClaudeArgsOpts): string[] {
 export const claudeAdapter: AgentAdapter = {
   name: "claude",
   aliases: ["c", "cc"],
+  supportsSandbox: true,
   async detect() {
     return new Promise((resolve) => {
       execFileAsync("which", ["claude"])
@@ -86,6 +88,7 @@ export const claudeAdapter: AgentAdapter = {
             cwd: process.cwd(),
             tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
             gitconfig: gitconfigIfPresent(),
+            readOnlyPaths: readOnlyPathsIn(spec.agentHome),
           }).join(" "),
         );
       } else {

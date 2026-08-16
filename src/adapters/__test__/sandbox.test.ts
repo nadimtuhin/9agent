@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { homedir } from "node:os";
 import {
+  assertMountableCwd,
   buildSandboxArgs,
   containerizeUrl,
   imageTag,
@@ -46,6 +48,31 @@ describe("containerizeUrl", () => {
 
   it("returns a non-URL untouched rather than corrupting it", () => {
     assert.equal(containerizeUrl("not a url"), "not a url");
+  });
+
+  it("handles loopback spellings the naive form missed", () => {
+    // Each of these silently no-op'd when the rewrite was a string .replace().
+    assert.equal(containerizeUrl("http://[::1]:20128/v1"), "http://host.docker.internal:20128/v1");
+    assert.equal(containerizeUrl("http://LOCALHOST:20128/v1"), "http://host.docker.internal:20128/v1");
+    assert.equal(containerizeUrl("http://localhost.:20128/v1"), "http://host.docker.internal:20128/v1");
+    assert.equal(containerizeUrl("http://127.1:20128/v1"), "http://host.docker.internal:20128/v1");
+    assert.equal(containerizeUrl("http://127.0.0.2:20128/v1"), "http://host.docker.internal:20128/v1");
+  });
+});
+
+describe("assertMountableCwd", () => {
+  it("refuses to mount the whole home directory", () => {
+    // `cd ~ && 9agent --sandbox` would hand the container ~/.ssh and every repo.
+    assert.throws(() => assertMountableCwd(homedir()), /entire home directory/);
+  });
+  it("refuses to mount /", () => {
+    assert.throws(() => assertMountableCwd("/"), /entire home directory/);
+  });
+  it("refuses a path containing ':' which would break the -v field split", () => {
+    assert.throws(() => assertMountableCwd("/work/od:d"), /contains ':'|containing ':'/);
+  });
+  it("allows an ordinary project directory", () => {
+    assert.doesNotThrow(() => assertMountableCwd("/work/proj"));
   });
 });
 
@@ -110,6 +137,17 @@ describe("buildSandboxArgs", () => {
   it("never bind-mounts host binaries", () => {
     // Mach-O arm64 behind Cellar symlinks cannot execute in a Linux container.
     assert.ok(!buildSandboxArgs(base).join(" ").includes("/opt/homebrew"));
+  });
+
+  it("mounts host-executed paths read-only over the home mount", () => {
+    // Without this an agent writes ~/.claude/settings.json hooks and gets host
+    // code execution on the next unsandboxed run — the sandbox would be decorative.
+    const argv = buildSandboxArgs({ ...base, readOnlyPaths: ["settings.json", "hooks"] });
+    const joined = argv.join(" ");
+    assert.match(joined, /-v \/home\/u\/\.claude\/settings\.json:\/home\/node\/\.claude\/settings\.json:ro/);
+    assert.match(joined, /-v \/home\/u\/\.claude\/hooks:\/home\/node\/\.claude\/hooks:ro/);
+    // must come AFTER the home mount, or the home mount buries them
+    assert.ok(joined.indexOf("/home/node/.claude ") < joined.indexOf("hooks:ro"));
   });
 
   it("puts the image before the command", () => {

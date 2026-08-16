@@ -10,7 +10,21 @@ import { runHost } from "./host.js";
 const execFileAsync = promisify(execFile);
 
 /** Hostnames that mean "this machine" and so must be redirected at the host. */
-const LOOPBACK = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+const LOOPBACK = new Set(["localhost", "0.0.0.0", "::1"]); // 127.0.0.0/8 handled by regex
+
+/**
+ * Paths under the agent's home that the HOST executes: hooks, plugin code, and the
+ * settings/instructions that point at them. They are mounted read-only over the
+ * top of the home mount, so an agent in the sandbox cannot write itself a hook
+ * that runs outside the sandbox. Without this, `--sandbox` is decorative.
+ */
+const HOST_EXECUTED_PATHS = [
+  "settings.json",
+  "settings.local.json",
+  "CLAUDE.md",
+  "hooks",
+  "plugins",
+];
 
 /** The name Docker gives the host from inside a container. */
 const HOST_ALIAS = "host.docker.internal";
@@ -42,11 +56,13 @@ export function containerizeUrl(url: string): string {
   } catch {
     return url; // not a URL we understand — leave it alone rather than corrupt it
   }
-  if (!LOOPBACK.has(parsed.hostname)) return url;
-  // Swap the hostname only inside the authority ("127.0.0.1:20128"), so the rest
-  // of the URL is returned byte-for-byte — no normalisation surprises.
-  const authority = parsed.host;
-  return url.replace(authority, authority.replace(parsed.hostname, HOST_ALIAS));
+  // Normalise before comparing: URL keeps IPv6 in brackets, and a trailing dot
+  // ("localhost.") is a legal absolute form of the same name.
+  const host = parsed.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+  const isLoopback = LOOPBACK.has(host) || /^127\./.test(host);
+  if (!isLoopback) return url;
+  parsed.hostname = HOST_ALIAS;
+  return parsed.toString();
 }
 
 /** The tag is the Dockerfile's content hash, so an edit rebuilds automatically. */
@@ -70,8 +86,10 @@ export function buildSandboxArgs(opts: {
   cwd: string;
   tty: boolean;
   gitconfig?: string;
+  /** Subset of HOST_EXECUTED_PATHS that exists on this machine. */
+  readOnlyPaths?: string[];
 }): string[] {
-  const { image, spec, bin, args, env, cwd, tty, gitconfig } = opts;
+  const { image, spec, bin, args, env, cwd, tty, gitconfig, readOnlyPaths = [] } = opts;
   return [
     "run",
     "--rm",
@@ -89,6 +107,11 @@ export function buildSandboxArgs(opts: {
     `${cwd}:/workspace`,
     "-v",
     `${spec.agentHome}:${spec.containerHome}`,
+    // Nested read-only mounts land on top of the home mount above, so order matters.
+    ...readOnlyPaths.flatMap((rel) => [
+      "-v",
+      `${join(spec.agentHome, rel)}:${spec.containerHome}/${rel}:ro`,
+    ]),
     ...(gitconfig ? ["-v", `${gitconfig}:/home/node/.gitconfig:ro`] : []),
     "-w",
     "/workspace",
@@ -141,6 +164,32 @@ export function gitconfigIfPresent(): string | undefined {
   return existsSync(path) ? path : undefined;
 }
 
+/** Only mount what exists — Docker errors on a bind whose source is missing. */
+export function readOnlyPathsIn(agentHome: string): string[] {
+  return HOST_EXECUTED_PATHS.filter((rel) => existsSync(join(agentHome, rel)));
+}
+
+/**
+ * Refuse to mount a directory so broad that the sandbox stops meaning anything.
+ * `cd ~ && 9agent --sandbox` would otherwise hand the container ~/.ssh, ~/.aws,
+ * and every other repo — exactly what the README promises it does not.
+ */
+export function assertMountableCwd(cwd: string): void {
+  if (cwd === "/" || cwd === homedir()) {
+    throw new Error(
+      `9agent: refusing to mount ${cwd} as /workspace — the sandbox would expose your ` +
+        `entire home directory (~/.ssh, ~/.aws, every repo). cd into a project first.`,
+    );
+  }
+  // -v is colon-delimited, so a colon in the path silently changes what gets mounted.
+  if (cwd.includes(":")) {
+    throw new Error(
+      `9agent: cannot sandbox a path containing ':' (${cwd}) — Docker uses ':' to ` +
+        `separate mount fields, so the mount would resolve to the wrong directory.`,
+    );
+  }
+}
+
 /**
  * Run an agent inside a container.
  *
@@ -154,6 +203,8 @@ export async function runSandbox(
   args: string[],
   env: Record<string, string>,
 ): Promise<void> {
+  const cwd = process.cwd();
+  assertMountableCwd(cwd); // before the build, so a bad cwd fails in a second
   const image = resolveImage(spec);
   await ensureImage(spec, image);
   const argv = buildSandboxArgs({
@@ -162,9 +213,10 @@ export async function runSandbox(
     bin,
     args,
     env,
-    cwd: process.cwd(),
+    cwd,
     tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
     gitconfig: gitconfigIfPresent(),
+    readOnlyPaths: readOnlyPathsIn(spec.agentHome),
   });
   await runHost("docker", argv, {});
 }

@@ -91,6 +91,14 @@ async function main(opts: ProgramOpts) {
     adapter = answer;
   }
 
+  // Fail before the interview, not after it: the adapter also refuses in launch(),
+  // but by then the user has answered three prompts for a run that cannot happen.
+  if (options.sandbox && !adapter.supportsSandbox) {
+    throw new Error(
+      `${adapter.name}: --sandbox is claude-only for now. See README "Sandbox".`,
+    );
+  }
+
   // 2. Pick model
   const models = await discoverModels(options.gateway, options.key);
   let model = options.model;

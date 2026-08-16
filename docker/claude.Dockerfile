@@ -15,7 +15,9 @@ RUN apt-get update \
 
 # Install as root into the global prefix, then drop privileges. This is what lets
 # us skip the wrappers' NPM_CONFIG_PREFIX=/tmp/.npm-global + PATH juggling.
-RUN npm install -g @anthropic-ai/claude-code
+# Pinned: the image tag is a hash of THIS FILE, so a floating version would mean
+# the cache key never changes while the contents silently do. Bump to upgrade.
+RUN npm install -g @anthropic-ai/claude-code@2.1.233
 
 USER node
 WORKDIR /workspace

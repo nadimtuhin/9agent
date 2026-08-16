@@ -26,7 +26,7 @@ grep -q "host.docker.internal:host-gateway" <<<"$out" || { echo "FAIL: sandbox a
 # mock-router is not loopback, so it must pass through UNCHANGED. The
 # loopback->host.docker.internal rewrite is covered by containerizeUrl unit tests.
 grep -q "ANTHROPIC_BASE_URL=http://mock-router:20128/v1" <<<"$out" || { echo "FAIL: non-loopback gateway was rewritten"; exit 1; }
-grep -q "ANTHROPIC_AUTH_TOKEN=sk_9r…redacted" <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
+grep -q "ANTHROPIC_AUTH_TOKEN=…redacted" <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
 
 # --sandbox on an agent that cannot honour it must ERROR, never run unsandboxed
 if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-sandbox-refused test-sandbox-refused 2>&1); then
