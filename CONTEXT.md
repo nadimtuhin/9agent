@@ -62,15 +62,33 @@ runaway Agent can destroy — the rest of your filesystem, global system state �
 does not defend against a hostile one, which holds your credentials and has full
 network access from inside.
 
-*Not* available for every Agent. An Agent whose Gateway is injected through a
-config file cannot be sandboxed without editing a file the user owns, so its
-Adapter refuses rather than running unsandboxed. Refusing is the honest failure;
-silently ignoring a security-shaped flag is the dangerous one.
+Available for **every** Agent — isolation is the point, and it is not claude's
+privilege. An Agent whose Gateway lives in a config file is sandboxed by mounting
+a **ShadowConfig**, never by editing the original.
+
+Whether an Agent can be sandboxed is declared by its Adapter, the same way an
+Adapter declares it cannot honour a PermissionMode. An Adapter that cannot must
+refuse; silently ignoring a security-shaped flag is the dangerous failure.
+
+## ShadowConfig
+
+A rewritten copy of an Agent's config, generated for a Sandbox and mounted
+read-only in place of the original. It exists because a container reaches the
+Gateway by a different hostname than the host does.
+
+*Not* an edit to the user's file — the original is never opened for writing. This
+is what lets a config-driven Agent be sandboxed without breaking the rule that
+9agent does not rewrite what the user owns. It is derived and disposable: delete
+it and the next launch regenerates it.
 
 ## Gateway
 
 The OpenAI-compatible 9Router endpoint that serves the model list and proxies
 inference. Identified by a base URL and an API key.
+
+A Gateway's address is relative to who is dialling: a Sandbox reaches the same
+Gateway by a different hostname than the host does. Rewriting that address in
+flight, or into a ShadowConfig, is not rewriting the user's configuration.
 
 *Not* a per-agent setting we own. Some Agents read routing from their own config
 file; when 9agent's Gateway disagrees with that file, we warn — we never rewrite

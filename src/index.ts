@@ -24,7 +24,7 @@ program
   .option("--key <token>", "9Router API key", process.env.NINEROUTER_KEY ?? "sk_9router")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
-  .option("--sandbox", "run the agent in a Docker container (claude only)")
+  .option("--sandbox", "run the agent in a Docker container")
   .argument("[args...]", "extra args passed through to the agent")
   .action(async (args: string[], opts: Omit<ProgramOpts, "args">) => {
     try {
@@ -95,7 +95,8 @@ async function main(opts: ProgramOpts) {
   // but by then the user has answered three prompts for a run that cannot happen.
   if (options.sandbox && !adapter.supportsSandbox) {
     throw new Error(
-      `${adapter.name}: --sandbox is claude-only for now. See README "Sandbox".`,
+      adapter.sandboxRefusal ??
+        `${adapter.name}: --sandbox is not supported for this agent.`,
     );
   }
 

@@ -26,6 +26,14 @@ export function buildHermesArgs(opts: {
 export const hermesAdapter: AgentAdapter = {
   name: "hermes",
   aliases: ["h"],
+  // Upstream blocks pip/wheel installs and ships its own Docker image with a
+  // different container contract (entrypoint dispatcher, /init as PID 1).
+  supportsSandbox: false,
+  sandboxRefusal:
+    "hermes: 9agent cannot sandbox hermes. Upstream refuses pip/wheel installs " +
+    "(\"Hermes is distributed via the shell installer, Docker image, or Nix\") and ships " +
+    "its own image with a different entrypoint contract. Use hermes' own " +
+    "docker-compose.yml in ~/.hermes/hermes-agent, or run without --sandbox.",
   async detect() {
     try {
       await execFileAsync("which", ["hermes"]);
@@ -35,15 +43,16 @@ export const hermesAdapter: AgentAdapter = {
     }
   },
   async launch(opts: LaunchOptions) {
+    const args = buildHermesArgs(opts);
+
     if (opts.sandbox) {
       throw new Error(
-        "hermes: --sandbox is claude-only. Hermes is installed here as an editable checkout " +
-          "(0.20.0) while the published PyPI release is 0.15.2, so a container would silently " +
-          "run different software than your host.",
+        "hermes: 9agent cannot sandbox hermes. Upstream refuses pip/wheel installs " +
+          "(\"Hermes is distributed via the shell installer, Docker image, or Nix\") and " +
+          "ships its own image with a different entrypoint contract. Use hermes' own " +
+          "docker-compose.yml in ~/.hermes/hermes-agent, or run without --sandbox.",
       );
     }
-
-    const args = buildHermesArgs(opts);
 
     // Warn before the dry-run guard: --print-only is how users inspect a launch,
     // so it must show every warning the real launch would print.

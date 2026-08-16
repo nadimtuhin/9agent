@@ -44,7 +44,7 @@ whether they were meant for the agent or for itself.
 | `--key <token>` | 9Router API key | `sk_9router` |
 | `--yes <mode>` | Non-interactive: `safe` or `dangerous` | — |
 | `--print-only` | Print resolved env+args, don't spawn | — |
-| `--sandbox` | Run the agent in a Docker container (claude only) | host |
+| `--sandbox` | Run the agent in a Docker container | host |
 
 ## Sandbox
 
@@ -58,11 +58,20 @@ The image is built on first use (~60s) and cached. Its tag is a hash of
 `docker/claude.Dockerfile`, so editing that file rebuilds automatically — there is
 no version to bump and no stale-image trap.
 
-**claude only.** `pi` and `hermes` route through their own config files
-(`~/.pi/agent/models.json`, `~/.hermes/config.yaml`), which a container cannot be
-pointed at the host without editing a file you own — something 9agent does not do
-([ADR-0001](docs/adr/0001-launcher-not-session-manager.md)). Both **error** rather
-than silently running unsandboxed. Use `9pi --sandbox` in the meantime.
+Supported for **claude** and **pi**. Each gets its own image.
+
+Pi routes through `~/.pi/agent/models.json` rather than env vars, so 9agent writes
+a **shadow config** — a rewritten copy under `~/.cache/9agent/sandbox/` whose
+gateway points at the container host — and mounts it read-only. Your own
+`models.json` is opened for reading and never written
+([ADR-0001](docs/adr/0001-launcher-not-session-manager.md)).
+
+**hermes is not supported.** Upstream refuses pip and wheel installs outright
+(*"Hermes is distributed via the shell installer, Docker image, or Nix"*) and
+ships its own image with a different entrypoint contract — `/init` as PID 1 and a
+dispatcher — which does not fit the uniform argv model the other agents use. Use
+hermes' own `docker-compose.yml`. `9agent -a hermes --sandbox` **errors** and says
+this, rather than silently running unsandboxed.
 
 ### What the sandbox does and does not protect
 

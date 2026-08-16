@@ -30,10 +30,10 @@ grep -q "ANTHROPIC_AUTH_TOKEN=…redacted" <<<"$out" || { echo "FAIL: auth token
 
 # --sandbox on an agent that cannot honour it must ERROR, never run unsandboxed
 if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-sandbox-refused test-sandbox-refused 2>&1); then
-  echo "$out"; echo "FAIL: pi --sandbox should have exited non-zero"; exit 1
+  echo "$out"; echo "FAIL: hermes --sandbox should have exited non-zero"; exit 1
 fi
 echo "$out"
-grep -q -- "--sandbox is claude-only" <<<"$out" || { echo "FAIL: pi --sandbox failed for the wrong reason"; exit 1; }
+grep -q "cannot sandbox hermes" <<<"$out" || { echo "FAIL: hermes --sandbox failed for the wrong reason"; exit 1; }
 
 # expected to FAIL with a specific, readable message — not hang, not a build error
 if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-no-tty test-no-tty 2>&1); then

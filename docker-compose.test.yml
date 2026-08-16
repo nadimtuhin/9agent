@@ -27,11 +27,11 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
-  # --sandbox must be refused, not silently ignored, for agents that cannot honour it
+  # --sandbox must be refused, not silently ignored, for an agent that cannot honour it
   test-sandbox-refused:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
-    command: --agent pi --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox
+    command: --agent hermes --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox
   # no --model on a non-TTY: must fail fast with a readable message, not hang
   test-no-tty:
     build: .

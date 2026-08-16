@@ -1,7 +1,10 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
+import { piSpec, resolveImage, runSandbox, writeShadowConfig } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -17,6 +20,7 @@ export function buildPiArgs(opts: {
 export const piAdapter: AgentAdapter = {
   name: "pi",
   aliases: ["p"],
+  supportsSandbox: true,
   async detect() {
     return new Promise((resolve) => {
       execFileAsync("which", ["pi"])
@@ -25,17 +29,32 @@ export const piAdapter: AgentAdapter = {
     });
   },
   async launch(opts: LaunchOptions) {
-    // Refuse rather than run unsandboxed: silently dropping a security-shaped
-    // flag is worse than not supporting it.
-    if (opts.sandbox) {
-      throw new Error(
-        "pi: --sandbox is claude-only for now. Pi routes through ~/.pi/agent/models.json, " +
-          "which the sandbox cannot point at the container host without editing a file you own. " +
-          "Use `9pi --sandbox` until 9agent supports it.",
-      );
-    }
-
     const args = buildPiArgs(opts);
+
+    if (opts.sandbox) {
+      // Pi routes via models.json, so the container needs a copy whose gateway
+      // points at the host. The user's own file is only ever read.
+      const spec = piSpec();
+      const source = join(spec.agentHome, "agent", "models.json");
+      if (!existsSync(source)) {
+        throw new Error(
+          `pi: --sandbox needs ${source}, which does not exist. Seed your 9router provider first.`,
+        );
+      }
+      const shadow = writeShadowConfig("pi", "models.json", source);
+      const mount = `${shadow}:${spec.containerHome}/agent/models.json:ro`;
+
+      if (opts.dryRun) {
+        console.error("--- pi sandbox dry run ---");
+        console.error("shadow config:", shadow);
+        console.error("image:", resolveImage(spec));
+        console.error("args:", args);
+        return;
+      }
+      console.error(`pi: launching sandboxed with model=${opts.model}`);
+      await runSandbox(spec, "pi", args, {}, [mount]);
+      return;
+    }
 
     if (opts.dryRun) {
       console.error("--- pi dry run ---");

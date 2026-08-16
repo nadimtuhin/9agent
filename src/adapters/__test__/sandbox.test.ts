@@ -5,6 +5,8 @@ import { homedir } from "node:os";
 import {
   assertMountableCwd,
   claudeSpec,
+  containerizeConfigText,
+  piSpec,
   buildSandboxArgs,
   containerizeUrl,
   imageTag,
@@ -78,6 +80,47 @@ describe("assertMountableCwd", () => {
   });
 });
 
+describe("containerizeConfigText", () => {
+  it("rewrites both loopback spellings in one file", () => {
+    // The 9pi wrapper used sed on "localhost" and missed the 127.0.0.1 form that
+    // the hermes config actually uses for model.base_url.
+    const yaml = [
+      "base_url: http://localhost:20128/v1",
+      "other: http://127.0.0.1:20128/v1",
+      "api_key: no-key-needed",
+    ].join("\n");
+    const out = containerizeConfigText(yaml);
+    assert.ok(!out.includes("localhost:20128"));
+    assert.ok(!out.includes("127.0.0.1:20128"));
+    assert.equal(out.match(/host\.docker\.internal/g)?.length, 2);
+    assert.ok(out.includes("api_key: no-key-needed"));
+  });
+
+  it("leaves remote URLs and non-URL text alone", () => {
+    const json = '{"a":"https://api.example.com/v1","b":"a localhost mention"}';
+    assert.equal(containerizeConfigText(json), json);
+  });
+
+  it("does not break JSON quoting", () => {
+    const json = '{"baseUrl":"http://localhost:20128/v1"}';
+    const out = containerizeConfigText(json);
+    assert.equal(JSON.parse(out).baseUrl, "http://host.docker.internal:20128/v1");
+  });
+});
+
+describe("every agent spec", () => {
+  it("points at a Dockerfile that exists", () => {
+    // Sandbox is for every agent, so every spec must ship its image recipe.
+    for (const spec of [claudeSpec(), piSpec()]) {
+      assert.ok(existsSync(spec.dockerfile), spec.dockerfile);
+    }
+  });
+  it("gives each agent its own image repo", () => {
+    const repos = [claudeSpec(), piSpec()].map((s) => s.repo);
+    assert.equal(new Set(repos).size, 2);
+  });
+});
+
 describe("imageTag", () => {
   it("changes when the Dockerfile changes, so an edit forces a rebuild", () => {
     assert.notEqual(imageTag("FROM node:22-slim"), imageTag("FROM node:23-slim"));
@@ -90,13 +133,7 @@ describe("imageTag", () => {
   });
 });
 
-describe("claudeSpec", () => {
-  it("points at a Dockerfile that exists", () => {
-    // Guards the failure mode that works in dev and breaks for installed users:
-    // the path is derived from import.meta.url and depends on rootDir staying src.
-    assert.ok(existsSync(claudeSpec().dockerfile), claudeSpec().dockerfile);
-  });
-});
+
 
 describe("buildSandboxArgs", () => {
   const base = {
@@ -163,6 +200,11 @@ describe("buildSandboxArgs", () => {
   it("never bind-mounts host binaries", () => {
     // Mach-O arm64 behind Cellar symlinks cannot execute in a Linux container.
     assert.ok(!buildSandboxArgs(base).join(" ").includes("/opt/homebrew"));
+  });
+
+  it("adds ShadowConfig mounts read-only", () => {
+    const argv = buildSandboxArgs({ ...base, extraMounts: ["/c/models.json:/home/node/.pi/agent/models.json:ro"] });
+    assert.ok(argv.includes("/c/models.json:/home/node/.pi/agent/models.json:ro"));
   });
 
   it("mounts host-executed paths read-only over the home mount", () => {

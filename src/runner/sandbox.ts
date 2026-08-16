@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +65,44 @@ export function containerizeUrl(url: string): string {
   return parsed.toString();
 }
 
+/**
+ * Rewrite every loopback URL in a config file's text so a container can reach it.
+ *
+ * Deliberately text-level and format-agnostic: it works on JSON and YAML alike,
+ * and it only ever touches things that parse as URLs. The 9pi wrapper used
+ * `sed s/localhost:20128/.../`, which misses the `127.0.0.1` spelling that the
+ * hermes config actually uses.
+ */
+export function containerizeConfigText(text: string): string {
+  return text.replace(/https?:\/\/[^\s"',}\]]+/g, (url) => containerizeUrl(url));
+}
+
+/**
+ * Where a ShadowConfig lives: a stable derived path, not a temp dir.
+ *
+ * Stable means it is overwritten in place each run, so there is nothing to clean
+ * up on crash or SIGKILL — the alternative needs handlers on four signals and
+ * still leaks. Treat it like the image cache: derived, disposable, regenerated.
+ */
+export function shadowConfigDir(agent: string): string {
+  return join(homedir(), ".cache", "9agent", "sandbox", agent);
+}
+
+/**
+ * Write a rewritten copy of a config file and return its path.
+ * The original is only ever read.
+ */
+export function writeShadowConfig(
+  agent: string,
+  relativeName: string,
+  sourcePath: string,
+): string {
+  const target = join(shadowConfigDir(agent), relativeName);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, containerizeConfigText(readFileSync(sourcePath, "utf-8")), "utf-8");
+  return target;
+}
+
 /** The tag is the Dockerfile's content hash, so an edit rebuilds automatically. */
 export function imageTag(dockerfileContents: string): string {
   return createHash("sha256").update(dockerfileContents).digest("hex").slice(0, 12);
@@ -88,8 +126,13 @@ export function buildSandboxArgs(opts: {
   gitconfig?: string;
   /** Subset of HOST_EXECUTED_PATHS that exists on this machine. */
   readOnlyPaths?: string[];
+  /** Ready-made "src:dst[:opts]" mounts, e.g. a ShadowConfig. */
+  extraMounts?: string[];
 }): string[] {
-  const { image, spec, bin, args, env, cwd, tty, gitconfig, readOnlyPaths = [] } = opts;
+  const {
+    image, spec, bin, args, env, cwd, tty, gitconfig,
+    readOnlyPaths = [], extraMounts = [],
+  } = opts;
   return [
     "run",
     "--rm",
@@ -112,6 +155,7 @@ export function buildSandboxArgs(opts: {
       "-v",
       `${join(spec.agentHome, rel)}:${spec.containerHome}/${rel}:ro`,
     ]),
+    ...extraMounts.flatMap((m) => ["-v", m]),
     ...(gitconfig ? ["-v", `${gitconfig}:/home/node/.gitconfig:ro`] : []),
     "-w",
     "/workspace",
@@ -133,6 +177,15 @@ export function claudeSpec(): SandboxSpec {
     dockerfile: dockerfilePath("claude.Dockerfile"),
     agentHome: join(homedir(), ".claude"),
     containerHome: "/home/node/.claude",
+  };
+}
+
+export function piSpec(): SandboxSpec {
+  return {
+    repo: "9agent/pi",
+    dockerfile: dockerfilePath("pi.Dockerfile"),
+    agentHome: join(homedir(), ".pi"),
+    containerHome: "/home/node/.pi",
   };
 }
 
@@ -210,6 +263,7 @@ export async function runSandbox(
   bin: string,
   args: string[],
   env: Record<string, string>,
+  extraMounts: string[] = [],
 ): Promise<void> {
   const cwd = process.cwd();
   assertMountableCwd(cwd); // before the build, so a bad cwd fails in a second
@@ -225,6 +279,7 @@ export async function runSandbox(
     tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
     gitconfig: gitconfigIfPresent(),
     readOnlyPaths: readOnlyPathsIn(spec.agentHome),
+    extraMounts,
   });
   await runHost("docker", argv, {});
 }

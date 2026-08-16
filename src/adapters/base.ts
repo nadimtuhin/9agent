@@ -12,8 +12,10 @@ export interface AgentAdapter {
   name: string;
   aliases: string[];
   detect(): Promise<boolean>;
-  /** Whether this agent can run in a container without editing a user-owned config. */
+  /** Whether this agent can run in a container. */
   supportsSandbox?: boolean;
+  /** Why not, if it cannot. Shown before the prompts rather than after them. */
+  sandboxRefusal?: string;
   launch(opts: LaunchOptions): Promise<void>;
 }
 
