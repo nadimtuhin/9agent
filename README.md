@@ -54,9 +54,12 @@ whether they were meant for the agent or for itself.
 9agent -a claude -m lc/LongCat-2.0 --yes safe --sandbox
 ```
 
-The image is built on first use and cached. Its tag is a hash of
-`docker/claude.Dockerfile`, so editing that file rebuilds automatically — there is
-no version to bump and no stale-image trap.
+The image is built on first use and cached. Its tag is a hash of the Dockerfile,
+so editing that file rebuilds automatically — there is no version to bump and no
+stale-image trap. For hermes, whose image is built from *their* checkout rather
+than a Dockerfile we control, the tag also folds in `git rev-parse HEAD` of that
+checkout: they ship changes without touching the Dockerfile, and a tag that
+ignored the revision would pin a stale image forever.
 
 Supported for **every** agent — claude, pi, and hermes. Each gets its own image.
 
@@ -88,14 +91,35 @@ It is a **blast-radius limiter, not a security boundary against a hostile agent.
 Protects:
 - The rest of your filesystem — a runaway `rm -rf` hits `/workspace` and the
   mounted agent home, not `~/Documents`, `~/.ssh`, or your other repos. 9agent
-  **refuses to run** if your cwd is `/` or your home directory, since mounting
-  either would make that promise false.
-- **Your host's hooks.** `~/.claude/settings.json`, `settings.local.json`,
-  `CLAUDE.md`, `hooks/`, and `plugins/` are mounted **read-only**. Without that, an
-  agent in the sandbox could write itself a hook that runs on your host the next
-  time you start Claude Code — which would make the sandbox decorative.
+  **refuses to run** if your cwd is `/`, `/Users`, your home directory, or a
+  dotfile directory such as `~/.ssh`, since mounting any of them would make that
+  promise false.
+- **Your host's hooks**, per agent, mounted **read-only**:
+  - claude and pi: `settings.json`, `settings.local.json`, `CLAUDE.md`, `hooks/`,
+    `plugins/`
+  - hermes: `agent-hooks/`, `hooks/`, `plugins/`, `skills/`, `agents/`, `bin/`,
+    `cron/`, and `hermes-agent/` — plus `config.yaml`, which the ShadowConfig
+    already mounts read-only
+
+  Without this an agent in the sandbox could write itself a hook that runs on your
+  host the next time you start that agent — which would make the sandbox
+  decorative. `hermes-agent/` is on the list because it is the checkout the image
+  is *built from*: writable, it would let the agent edit a Dockerfile that your
+  host's Docker daemon then runs.
 - Global system state — `npm install -g`, `apt`, and friends are discarded on exit.
 - Host process space — the agent cannot signal or inspect host processes.
+
+Also worth knowing:
+- **The hermes container runs as root inside itself** (their wrapper rejects
+  `--user` and maps your UID via `HERMES_UID`/`HERMES_GID`); claude and pi run as
+  `node`. The mounts are the actual exposure either way — container root cannot
+  defeat a `:ro` bind — but the difference is real and undocumented elsewhere.
+- **Symlinks in an agent home that point outside it are bind-mounted read-only**,
+  so they do not arrive dangling. This widens what the container can *read* to
+  whatever you linked in. Only single files are carried across — a link to a
+  directory, or into `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, or `~/.docker`,
+  is refused with a message. The agent can write its own home, so treat that list
+  as attacker-controlled input, which is exactly why the rule is this narrow.
 
 Does **not** protect:
 - **Your working directory.** Mounted read-write by design; a sandbox that cannot

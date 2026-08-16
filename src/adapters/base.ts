@@ -21,3 +21,19 @@ export interface AgentAdapter {
 
 // Ponytail: registry filled in index.ts — avoids circular import
 export const REGISTRY: AgentAdapter[] = [];
+
+/**
+ * Fail before the interview, not after it: by the time launch() refuses, the
+ * user has answered three prompts for a run that cannot happen.
+ *
+ * Every shipped adapter sets `supportsSandbox: true`, so this branch is only
+ * reachable by a NEW adapter that omits the field — the moment it matters most
+ * and is watched least.
+ */
+export function assertSandboxSupported(adapter: AgentAdapter): void {
+  if (adapter.supportsSandbox) return;
+  throw new Error(
+    adapter.sandboxRefusal ??
+      `${adapter.name}: --sandbox is not supported for this agent.`,
+  );
+}

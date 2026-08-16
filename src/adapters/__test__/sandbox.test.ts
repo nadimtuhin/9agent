@@ -13,7 +13,9 @@ import { join } from "node:path";
 import {
   assertMountableCwd,
   claudeSpec,
+  dropCollidingMounts,
   escapingSymlinkMounts,
+  isSensitivePath,
   hermesCheckout,
   hermesSpec,
   containerizeConfigText,
@@ -88,8 +90,16 @@ describe("assertMountableCwd", () => {
   it("refuses a path containing ':' which would break the -v field split", () => {
     assert.throws(() => assertMountableCwd("/work/od:d"), /contains ':'|containing ':'/);
   });
-  it("allows an ordinary project directory", () => {
-    assert.doesNotThrow(() => assertMountableCwd("/work/proj"));
+  it("refuses /Users, the parent of home — strictly worse than home itself", () => {
+    assert.throws(() => assertMountableCwd("/Users"), /entire home directory/);
+  });
+  it("refuses a dotfile directory such as ~/.ssh", () => {
+    assert.throws(() => assertMountableCwd(join(homedir(), ".ssh")), /entire home/);
+  });
+  it("allows an ordinary project directory under home", () => {
+    // A `.`-prefix check written as join(home, ".") normalises to home itself
+    // and refuses every project the user actually works in.
+    assert.doesNotThrow(() => assertMountableCwd(join(homedir(), "opensource", "9agent")));
   });
 });
 
@@ -160,6 +170,49 @@ describe("escapingSymlinkMounts", () => {
   it("returns nothing when the agent home does not exist", () => {
     assert.deepEqual(escapingSymlinkMounts(join(root, "nope"), "/opt/data"), []);
   });
+
+  it("finds nested links, which are the common case, not the exotic one", () => {
+    // Every skill in this user's ~/.claude/skills is a link out to another
+    // agent's tree; the top level has none. A depth-1 scan finds nothing.
+    mkdirSync(join(home, "skills"));
+    symlinkSync(outside, join(home, "skills", "nested.md"));
+    assert.ok(
+      escapingSymlinkMounts(home, "/opt/data").includes(
+        `${outside}:/opt/data/skills/nested.md:ro`,
+      ),
+    );
+  });
+
+  it("refuses a link to a directory, however it got there", () => {
+    // The agent can write its own home, so one `ln -s ~/.ssh` from inside the
+    // container would mount the whole directory on the next run.
+    const dir = join(root, "outside-dir");
+    mkdirSync(dir);
+    symlinkSync(dir, join(home, "dirlink"));
+    assert.ok(!escapingSymlinkMounts(home, "/opt/data").some((m) => m.includes("dirlink")));
+  });
+});
+
+describe("isSensitivePath", () => {
+  it("denies credential directories even for a single-file link", () => {
+    assert.ok(isSensitivePath(join(homedir(), ".ssh", "id_ed25519")));
+    assert.ok(isSensitivePath(join(homedir(), ".aws", "credentials")));
+  });
+  it("allows an ordinary linked config", () => {
+    assert.ok(!isSensitivePath(join(homedir(), ".claude", "persona-core.md")));
+  });
+});
+
+describe("dropCollidingMounts", () => {
+  it("yields the container path to the deliberate mount", () => {
+    // Docker rejects a duplicate mount point outright, so one colliding
+    // symlink would take --sandbox down entirely.
+    const kept = dropCollidingMounts(
+      ["/a/config.yaml:/opt/data/config.yaml:ro", "/a/soul.md:/opt/data/SOUL.md:ro"],
+      ["/shadow/config.yaml:/opt/data/config.yaml:ro"],
+    );
+    assert.deepEqual(kept, ["/a/soul.md:/opt/data/SOUL.md:ro"]);
+  });
 });
 
 describe("hermesSpec", () => {
@@ -182,9 +235,31 @@ describe("hermesSpec", () => {
     assert.ok(!argv().includes("--user"));
   });
   it("passes the host UID/GID upstream asks for instead", () => {
+    // Exact values, not just the prefix: HERMES_UID=0 passes a prefix check and
+    // makes their stage2 chown the user's real ~/.hermes tree to root.
     const a = argv();
-    assert.ok(a.some((x) => x.startsWith("HERMES_UID=")));
-    assert.ok(a.some((x) => x.startsWith("HERMES_GID=")));
+    assert.ok(a.includes(`HERMES_UID=${process.getuid?.()}`));
+    assert.ok(a.includes(`HERMES_GID=${process.getgid?.()}`));
+  });
+
+  it("locks down the paths the host executes out of ~/.hermes", () => {
+    // This was once [], on the false claim that the host runs nothing there.
+    // config.yaml declares a post_tool_call hook in ~/.hermes/agent-hooks/.
+    const paths = hermesSpec().hostExecutedPaths ?? [];
+    for (const rel of ["agent-hooks", "plugins", "skills", "bin", "hermes-agent"]) {
+      assert.ok(paths.includes(rel), `hermes must lock down ${rel}`);
+    }
+  });
+
+  it("keeps config.yaml out of the list, where the ShadowConfig already sits", () => {
+    // Both would target /opt/data/config.yaml, and Docker rejects duplicates.
+    assert.ok(!(hermesSpec().hostExecutedPaths ?? []).includes("config.yaml"));
+  });
+
+  it("ties the image tag to the checkout, not just the Dockerfile", () => {
+    // Upstream ships changes without touching their Dockerfile; a tag that
+    // ignores the revision would pin a stale image forever.
+    assert.equal(typeof hermesSpec().buildRevision, "function");
   });
   it("mounts config and gitconfig under /opt/data, hermes' $HOME", () => {
     const a = argv();

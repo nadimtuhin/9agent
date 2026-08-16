@@ -4,7 +4,7 @@ import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { discoverModels } from "./discovery.js";
 import { parseYes } from "./opts.js";
-import { REGISTRY } from "./adapters/base.js";
+import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { piAdapter } from "./adapters/pi.js";
 import { hermesAdapter } from "./adapters/hermes.js";
@@ -91,14 +91,7 @@ async function main(opts: ProgramOpts) {
     adapter = answer;
   }
 
-  // Fail before the interview, not after it: the adapter also refuses in launch(),
-  // but by then the user has answered three prompts for a run that cannot happen.
-  if (options.sandbox && !adapter.supportsSandbox) {
-    throw new Error(
-      adapter.sandboxRefusal ??
-        `${adapter.name}: --sandbox is not supported for this agent.`,
-    );
-  }
+  if (options.sandbox) assertSandboxSupported(adapter);
 
   // 2. Pick model
   const models = await discoverModels(options.gateway, options.key);

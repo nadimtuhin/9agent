@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import type { Stats } from "node:fs";
 import {
   existsSync,
   lstatSync,
@@ -7,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -34,6 +36,32 @@ const HOST_EXECUTED_PATHS = [
   "plugins",
 ];
 
+/**
+ * The same list for hermes, which keeps its host-executed code elsewhere.
+ *
+ * This was once `[]`, on the comment "the host runs nothing out of ~/.hermes".
+ * That was never checked and was false: config.yaml declares
+ * `hooks.post_tool_call.command: ~/.hermes/agent-hooks/verify-edit.sh`, and the
+ * host runs it after every edit. A sandboxed agent could rewrite that script and
+ * get host execution on the next unsandboxed launch.
+ *
+ * `hermes-agent` is here for a second reason: it is the checkout 9agent builds
+ * the sandbox image *from*. Left writable, an agent could edit that Dockerfile
+ * and have the host's Docker daemon run it on the next --sandbox launch.
+ */
+const HERMES_HOST_EXECUTED_PATHS = [
+  // config.yaml is deliberately absent: the ShadowConfig already mounts it :ro
+  // at the same container path, and Docker rejects a duplicate mount point.
+  "agent-hooks",
+  "hooks",
+  "plugins",
+  "skills",
+  "agents",
+  "bin", // mcp_servers resolve commands like `uvx` through here
+  "cron", // jobs.json schedules host-side execution
+  "hermes-agent", // the build context for the sandbox image itself
+];
+
 /** The name Docker gives the host from inside a container. */
 const HOST_ALIAS = "host.docker.internal";
 
@@ -56,6 +84,11 @@ export interface SandboxSpec {
   user?: string;
   /** Where the container expects ~/.gitconfig, which follows $HOME per image. */
   gitconfigTarget: string;
+  /**
+   * Extra identity for the image tag, for images built from a source tree we do
+   * not control. Omit when the Dockerfile alone determines what gets built.
+   */
+  buildRevision?: () => string;
   /** Env every sandboxed run of this agent needs, e.g. hermes' UID mapping. */
   specEnv?: Record<string, string>;
   /**
@@ -99,7 +132,10 @@ export function containerizeUrl(url: string): string {
  * hermes config actually uses.
  */
 export function containerizeConfigText(text: string): string {
-  return text.replace(/https?:\/\/[^\s"',}\]]+/g, (url) => containerizeUrl(url));
+  // The delimiter class must include every character that can *close* a URL in
+  // YAML, JSON, or Markdown. Omitting the backtick swallowed it into the
+  // hostname and re-emitted it percent-encoded, corrupting the line.
+  return text.replace(/https?:\/\/[^\s"',}\]>)`<]+/g, (url) => containerizeUrl(url));
 }
 
 /**
@@ -123,8 +159,13 @@ export function writeShadowConfig(
   sourcePath: string,
 ): string {
   const target = join(shadowConfigDir(agent), relativeName);
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, containerizeConfigText(readFileSync(sourcePath, "utf-8")), "utf-8");
+  mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+  // Inherit the source's mode. These files carry provider API keys, and the
+  // default umask turned a user's 0640 config into a world-readable 0644 copy.
+  writeFileSync(target, containerizeConfigText(readFileSync(sourcePath, "utf-8")), {
+    encoding: "utf-8",
+    mode: statSync(sourcePath).mode & 0o777,
+  });
   return target;
 }
 
@@ -240,6 +281,7 @@ export function hermesSpec(): SandboxSpec {
     repo: "9agent/hermes",
     dockerfile: join(checkout, "Dockerfile"),
     buildContext: checkout,
+    buildRevision: () => gitRevision(checkout),
     agentHome: join(homedir(), ".hermes"),
     containerHome: "/opt/data",
     user: undefined, // their wrapper rejects --user; see HERMES_UID below
@@ -248,14 +290,29 @@ export function hermesSpec(): SandboxSpec {
       HERMES_UID: String(process.getuid?.() ?? 1000),
       HERMES_GID: String(process.getgid?.() ?? 1000),
     },
-    // The host runs nothing out of ~/.hermes, so there is nothing to lock down.
-    hostExecutedPaths: [],
+    hostExecutedPaths: HERMES_HOST_EXECUTED_PATHS,
   };
+}
+
+/** The checkout's current commit, or "" when it is not a usable git tree. */
+export function gitRevision(dir: string): string {
+  try {
+    return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
 }
 
 export function resolveImage(spec: SandboxSpec): string {
   const contents = readFileSync(spec.dockerfile, "utf-8");
-  return `${spec.repo}:${imageTag(contents)}`;
+  // For our own images the Dockerfile *is* the identity — it pins the agent
+  // version. For an image built from someone else's checkout it is not: they
+  // can ship a month of changes without touching it, and the tag would never
+  // move, so 9agent would run a frozen image forever with no signal.
+  return `${spec.repo}:${imageTag(contents + (spec.buildRevision?.() ?? ""))}`;
 }
 
 /** Build the image if this exact Dockerfile has not been built before. */
@@ -305,11 +362,10 @@ export async function ensureImage(spec: SandboxSpec, image: string): Promise<voi
 export function escapingSymlinkMounts(
   agentHome: string,
   containerHome: string,
+  maxDepth = 3,
 ): string[] {
-  let entries: string[];
   let root: string;
   try {
-    entries = readdirSync(agentHome);
     // Resolve the home too, or the "is it inside?" test compares a resolved
     // target against an unresolved prefix and calls every link an escapee.
     // (/var is a symlink to /private/var on macOS — that is not a corner case.)
@@ -317,18 +373,101 @@ export function escapingSymlinkMounts(
   } catch {
     return [];
   }
-  return entries.flatMap((name) => {
-    const path = join(agentHome, name);
-    let target: string;
+
+  // Nested links are the common case, not the exotic one: on this machine every
+  // skill in ~/.claude/skills/ is a link out to another agent's tree, while the
+  // top level has none at all. A scan that stops at depth 1 finds nothing.
+  const walk = (dir: string, relative: string, depth: number): string[] => {
+    let names: string[];
     try {
-      if (!lstatSync(path).isSymbolicLink()) return [];
-      target = realpathSync(path); // resolves chains; throws on a dangling link
+      names = readdirSync(dir);
     } catch {
-      return []; // already broken on the host — not ours to fix
+      return []; // unreadable directory is the user's problem, not a mount
     }
-    const inside = target === root || target.startsWith(root + "/");
-    if (inside || target.includes(":")) return [];
-    return [`${target}:${containerHome}/${name}:ro`];
+    return names.flatMap((name) => {
+      const path = join(dir, name);
+      const rel = relative ? `${relative}/${name}` : name;
+      let link: Stats;
+      try {
+        link = lstatSync(path);
+      } catch {
+        return [];
+      }
+      // Descend into real directories only. Following a directory *link* would
+      // walk back out of the home we are trying to bound.
+      if (link.isDirectory()) {
+        return depth < maxDepth ? walk(path, rel, depth + 1) : [];
+      }
+      if (!link.isSymbolicLink()) return [];
+      return mountForLink(path, rel, root, containerHome);
+    });
+  };
+  return walk(agentHome, "", 1);
+}
+
+function mountForLink(
+  path: string,
+  rel: string,
+  root: string,
+  containerHome: string,
+): string[] {
+  let target: string;
+  let targetIsFile: boolean;
+  try {
+    target = realpathSync(path); // resolves chains; throws on a dangling link
+    targetIsFile = statSync(target).isFile();
+  } catch {
+    return []; // already broken on the host — not ours to fix
+  }
+  if (target === root || target.startsWith(root + "/")) return [];
+  if (target.includes(":")) {
+    console.error(`9agent: not mounting ${rel} — its target contains ':'.`);
+    return [];
+  }
+  // A directory link is how this turns from a convenience into a hole: one
+  // `ln -s ~/.ssh` written from inside the container, and the *next* run mounts
+  // the whole directory. The agent can write its own home, so this list is
+  // agent-controlled input. Single files are the documented case (SOUL.md).
+  if (!targetIsFile) return [];
+  if (isSensitivePath(target)) {
+    console.error(`9agent: refusing to mount ${rel} — it points into ${target}.`);
+    return [];
+  }
+  return [`${target}:${containerHome}/${rel}:ro`];
+}
+
+/**
+ * Paths whose contents are never worth exposing to an Agent, however the link
+ * that reaches them got there.
+ *
+ * This is a backstop, not the main defence: the agent can write inside its own
+ * home, so anything derived from that directory is agent-controlled input. The
+ * file-only rule above is what closes the hole; this catches the narrower
+ * `ln -s ~/.ssh/id_ed25519` that survives it.
+ */
+export function isSensitivePath(target: string): boolean {
+  const home = homedir();
+  const denied = [".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config/gh"];
+  return denied.some(
+    (rel) => target === join(home, rel) || target.startsWith(join(home, rel) + "/"),
+  );
+}
+
+/**
+ * Drop mounts whose container path is already claimed.
+ *
+ * Docker rejects a duplicate mount target outright ("Duplicate mount point"),
+ * so one colliding symlink would take `--sandbox` down entirely — and a
+ * sandbox that refuses to start pushes the user to run without one. The
+ * already-claimed mount is the deliberate one, so it wins.
+ */
+export function dropCollidingMounts(mounts: string[], claimed: string[]): string[] {
+  const targetOf = (m: string) => m.split(":")[1];
+  const taken = new Set(claimed.map(targetOf));
+  return mounts.filter((m) => {
+    if (!taken.has(targetOf(m))) return true;
+    console.error(`9agent: ignoring ${m} — ${targetOf(m)} is already mounted.`);
+    return false;
   });
 }
 
@@ -351,9 +490,24 @@ export function readOnlyPathsIn(
  * and every other repo — exactly what the README promises it does not.
  */
 export function assertMountableCwd(cwd: string): void {
-  if (cwd === "/" || cwd === homedir()) {
+  // Normalise first. The old exact-string check let `/Users` through — the
+  // parent of home, so strictly worse than the case it refused — along with the
+  // trailing-slash and /private spellings of home itself.
+  let real: string;
+  try {
+    real = realpathSync(cwd);
+  } catch {
+    real = cwd;
+  }
+  const home = homedir();
+  const tooBroad = ["/", "/Users", "/home", "/etc", "/var", "/tmp", home, dirname(home)];
+  // Refusing ~/.anything covers ~/.ssh and ~/.aws without naming them all.
+  // Not join(home, ".") — path.join normalises the "." away and that prefix
+  // then matches the whole home directory, refusing every project under it.
+  const isHomeDotDir = real.startsWith(`${home}/.`);
+  if (tooBroad.includes(real) || isHomeDotDir) {
     throw new Error(
-      `9agent: refusing to mount ${cwd} as /workspace — the sandbox would expose your ` +
+      `9agent: refusing to mount ${real} as /workspace — the sandbox would expose your ` +
         `entire home directory (~/.ssh, ~/.aws, every repo). cd into a project first.`,
     );
   }
@@ -384,6 +538,7 @@ export async function runSandbox(
   assertMountableCwd(cwd); // before the build, so a bad cwd fails in a second
   const image = resolveImage(spec);
   await ensureImage(spec, image);
+  const readOnlyPaths = readOnlyPathsIn(spec.agentHome, spec.hostExecutedPaths);
   const argv = buildSandboxArgs({
     image,
     spec,
@@ -393,9 +548,18 @@ export async function runSandbox(
     cwd,
     tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
     gitconfig: gitconfigIfPresent(),
-    readOnlyPaths: readOnlyPathsIn(spec.agentHome, spec.hostExecutedPaths),
+    readOnlyPaths,
+    // Symlink-derived mounts are guesses; the caller's are deliberate. When
+    // both want the same container path, the deliberate one wins.
     extraMounts: [
-      ...escapingSymlinkMounts(spec.agentHome, spec.containerHome),
+      ...dropCollidingMounts(
+        escapingSymlinkMounts(spec.agentHome, spec.containerHome),
+        [
+          ...extraMounts,
+          ...readOnlyPaths.map((rel) => `x:${spec.containerHome}/${rel}`),
+          `x:${spec.gitconfigTarget}`,
+        ],
+      ),
       ...extraMounts,
     ],
   });
