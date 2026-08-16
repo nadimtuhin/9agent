@@ -1,11 +1,39 @@
 # 9agent
 
-Universal 9Router agent launcher. Discover models from any OpenAI-compatible `/v1/models` endpoint, pick agent + model + mode interactively, launch.
+One launcher for every coding agent you already have. 9agent asks a gateway which
+models exist, lets you pick an agent, a model, and a permission mode, then execs
+that agent's own CLI with the right flags and environment — and gets out of the
+way. It is a launcher, not a session manager: it never wraps, proxies, or
+supervises the agent it starts, and it never rewrites your config files.
+
+Optionally, `--sandbox` runs the whole thing in Docker.
+
+```
+9agent -a claude -m lc/LongCat-2.0 --sandbox
+   └─ asks the gateway for models
+      └─ execs `claude` with the gateway wired in, inside a container
+```
+
+## Requirements
+
+- **Node >= 20**
+- **A running gateway** that serves an OpenAI-compatible `GET /v1/models`.
+  9agent was built for [9Router](https://github.com/nadimtuhin/9router), which
+  routes one endpoint to 40+ providers and is what `--gateway` defaults to
+  (`http://localhost:20128/v1`). Anything that speaks the same endpoint works —
+  9agent never parses model ids, it just lists what the gateway reports.
+- **At least one agent CLI installed**: [claude](https://claude.com/claude-code),
+  [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), or hermes.
+  9agent launches these; it does not bundle them.
+
+Without a reachable gateway, 9agent exits with
+`Cannot reach <url>/v1/models ... Is 9Router running?` rather than hanging.
 
 ## Install
 
 ```bash
 npm i -g 9agent
+9agent --version
 ```
 
 ## Usage

@@ -13,6 +13,12 @@ VERSION=$(node -p "require('./package.json').version")
 TARBALL="/tmp/9agent-${VERSION}.tgz"
 echo "9agent release ${VERSION}"
 
+echo "==> working tree"
+# Publishing from a dirty tree ships code that exists on no commit, so the
+# published artifact can never be reproduced from git.
+git diff --quiet && git diff --cached --quiet \
+  || { echo "FAIL: uncommitted changes — commit or stash before releasing."; exit 1; }
+
 echo "==> gate"
 bash scripts/checks.sh
 
@@ -39,7 +45,21 @@ OUT=$(cd "$SMOKE/package" && node bin/9agent.js --help 2>&1) \
   || { echo "FAIL: packed CLI does not run:"; echo "$OUT"; exit 1; }
 grep -q -- "--sandbox" <<<"$OUT" \
   || { echo "FAIL: packed CLI is missing --sandbox; stale dist?"; exit 1; }
-echo "    ok  packed CLI runs and knows --sandbox"
+
+VOUT=$(cd "$SMOKE/package" && node bin/9agent.js --version 2>&1)
+[ "$VOUT" = "$VERSION" ] \
+  || { echo "FAIL: packed CLI reports version '${VOUT}', expected '${VERSION}'"; exit 1; }
+
+# --help only loads the module graph. Drive a real launch far enough to reach
+# discovery and an adapter, against a port nothing listens on, with a throwaway
+# HOME so no cached model list can mask a failure. Deterministic, no gateway.
+FAKE_HOME=$(mktemp -d)
+DOUT=$(cd "$SMOKE/package" && HOME="$FAKE_HOME" node bin/9agent.js \
+  --gateway http://127.0.0.1:59999/v1 -a claude -m x --yes safe --print-only 2>&1 || true)
+rm -rf "$FAKE_HOME"
+grep -q "Is 9Router running?" <<<"$DOUT" \
+  || { echo "FAIL: offline path did not produce its usual error:"; echo "$DOUT"; exit 1; }
+echo "    ok  packed CLI runs, reports ${VERSION}, and fails legibly offline"
 
 echo "==> publish"
 if [ "${DRY_RUN:-0}" = "1" ]; then

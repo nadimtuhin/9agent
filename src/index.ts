@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { select, search } from "@inquirer/prompts";
 import process from "node:process";
+import { createRequire } from "node:module";
 import { discoverModels } from "./discovery.js";
 import { parseYes } from "./opts.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
@@ -14,9 +15,14 @@ REGISTRY.push(claudeAdapter, piAdapter, hermesAdapter);
 
 const program = new Command();
 
+// Read at runtime rather than importing JSON: resolves in both the src/ and
+// dist/ layouts, the same way dockerfilePath() does, with no assert syntax.
+const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
+
 program
   .name("9agent")
   .description("Universal 9Router agent launcher")
+  .version(pkg.version)
   .option("-a, --agent <name>", "agent name or alias")
   .option("-m, --model <id>", "model ID (skip picker)")
   .option("--yolo", "skip permissions / dangerous mode")
