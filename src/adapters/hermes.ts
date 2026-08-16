@@ -35,6 +35,14 @@ export const hermesAdapter: AgentAdapter = {
     }
   },
   async launch(opts: LaunchOptions) {
+    if (opts.sandbox) {
+      throw new Error(
+        "hermes: --sandbox is claude-only. Hermes is installed here as an editable checkout " +
+          "(0.20.0) while the published PyPI release is 0.15.2, so a container would silently " +
+          "run different software than your host.",
+      );
+    }
+
     const args = buildHermesArgs(opts);
 
     // Warn before the dry-run guard: --print-only is how users inspect a launch,

@@ -25,6 +25,16 @@ export const piAdapter: AgentAdapter = {
     });
   },
   async launch(opts: LaunchOptions) {
+    // Refuse rather than run unsandboxed: silently dropping a security-shaped
+    // flag is worse than not supporting it.
+    if (opts.sandbox) {
+      throw new Error(
+        "pi: --sandbox is claude-only for now. Pi routes through ~/.pi/agent/models.json, " +
+          "which the sandbox cannot point at the container host without editing a file you own. " +
+          "Use `9pi --sandbox` until 9agent supports it.",
+      );
+    }
+
     const args = buildPiArgs(opts);
 
     if (opts.dryRun) {

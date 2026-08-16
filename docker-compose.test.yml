@@ -21,6 +21,17 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent hermes --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  # --sandbox --print-only must resolve the image tag and compose the docker argv
+  # without needing a daemon (there is none in here, by design — see the harness).
+  test-sandbox-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
+  # --sandbox must be refused, not silently ignored, for agents that cannot honour it
+  test-sandbox-refused:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent pi --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox
   # no --model on a non-TTY: must fail fast with a readable message, not hang
   test-no-tty:
     build: .

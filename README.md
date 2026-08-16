@@ -44,6 +44,51 @@ whether they were meant for the agent or for itself.
 | `--key <token>` | 9Router API key | `sk_9router` |
 | `--yes <mode>` | Non-interactive: `safe` or `dangerous` | — |
 | `--print-only` | Print resolved env+args, don't spawn | — |
+| `--sandbox` | Run the agent in a Docker container (claude only) | host |
+
+## Sandbox
+
+`--sandbox` runs the agent inside a container instead of on your host:
+
+```bash
+9agent -a claude -m lc/LongCat-2.0 --yes safe --sandbox
+```
+
+The image is built on first use (~60s) and cached. Its tag is a hash of
+`docker/claude.Dockerfile`, so editing that file rebuilds automatically — there is
+no version to bump and no stale-image trap.
+
+**claude only.** `pi` and `hermes` route through their own config files
+(`~/.pi/agent/models.json`, `~/.hermes/config.yaml`), which a container cannot be
+pointed at the host without editing a file you own — something 9agent does not do
+([ADR-0001](docs/adr/0001-launcher-not-session-manager.md)). Both **error** rather
+than silently running unsandboxed. Use `9pi --sandbox` in the meantime.
+
+### What the sandbox does and does not protect
+
+It is a **blast-radius limiter, not a security boundary against a hostile agent.**
+
+Protects:
+- The rest of your filesystem — a runaway `rm -rf` hits `/workspace` and the
+  mounted agent home, not `~/Documents`, `~/.ssh`, or your other repos.
+- Global system state — `npm install -g`, `apt`, and friends are discarded on exit.
+- Host process space — the agent cannot signal or inspect host processes.
+
+Does **not** protect:
+- **Your working directory.** Mounted read-write by design; a sandbox that cannot
+  edit your code is useless.
+- **Your credentials.** `~/.claude` is mounted read-write and holds your tokens.
+- **The network.** Full outbound access, including your host's loopback — every
+  other local service and dev server is reachable.
+- **The gateway key.** Passed as an env var, visible to `docker inspect`.
+
+### Known limits
+
+- Exit codes **125–127** are ambiguous in sandbox mode: Docker uses them for its
+  own failures, so they cannot be distinguished from an agent that exits 125–127.
+  Every other code, including signal deaths (`128 + signum`), passes through exactly.
+- Verified on macOS (OrbStack/Docker Desktop). On Linux, a host UID other than
+  1000 may produce wrong ownership on `/workspace` — untested, so unclaimed.
 
 ### Environment variables
 
@@ -63,7 +108,7 @@ whether they were meant for the agent or for itself.
 ### How each adapter translates `--yolo`
 
 - **Claude**: adds `--dangerously-skip-permissions` to args
-- **Pi**: no-op (Pi has no built-in permission system; sandbox externally if needed)
+- **Pi**: no-op (Pi has no built-in permission system)
 - **Hermes**: adds `--yolo` (note: `--safe-mode` is *not* the inverse — it disables customizations; safe mode is simply omitting `--yolo`)
 
 ### How Pi gateway routing works
@@ -94,4 +139,4 @@ node --test --import tsx src/__check.ts   # self-check (needs 9Router)
 
 ## Status
 
-v1: host runner only. Docker `--sandbox` is v2.
+Host runner, plus Docker `--sandbox` for claude (see [Sandbox](#sandbox)).

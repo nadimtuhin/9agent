@@ -24,6 +24,7 @@ program
   .option("--key <token>", "9Router API key", process.env.NINEROUTER_KEY ?? "sk_9router")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
+  .option("--sandbox", "run the agent in a Docker container (claude only)")
   .argument("[args...]", "extra args passed through to the agent")
   .action(async (args: string[], opts: Omit<ProgramOpts, "args">) => {
     try {
@@ -42,6 +43,7 @@ interface ProgramOpts {
   key: string;
   yes?: string;
   printOnly: boolean;
+  sandbox: boolean;
   args: string[];
 }
 
@@ -54,6 +56,7 @@ async function main(opts: ProgramOpts) {
     key: opts.key,
     yes: opts.yes,
     printOnly: opts.printOnly ?? false,
+    sandbox: opts.sandbox ?? false,
     args: opts.args ?? [],
   };
 
@@ -137,6 +140,7 @@ async function main(opts: ProgramOpts) {
     yolo,
     extraArgs: options.args,
     dryRun: options.printOnly,
+    sandbox: options.sandbox,
   };
   await adapter.launch(launchOpts);
 }

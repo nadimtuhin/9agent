@@ -2,8 +2,25 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
+import {
+  buildSandboxArgs,
+  claudeSpec,
+  containerizeUrl,
+  gitconfigIfPresent,
+  resolveImage,
+  runSandbox,
+} from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
+
+/** --print-only output gets pasted into bug reports, so keep the token out of it. */
+export function redactSecrets(env: Record<string, string>): Record<string, string> {
+  const safe = { ...env };
+  if (safe.ANTHROPIC_AUTH_TOKEN) {
+    safe.ANTHROPIC_AUTH_TOKEN = `${safe.ANTHROPIC_AUTH_TOKEN.slice(0, 5)}…redacted`;
+  }
+  return safe;
+}
 
 export interface ClaudeEnvOpts {
   model: string;
@@ -46,14 +63,43 @@ export const claudeAdapter: AgentAdapter = {
     });
   },
   async launch(opts: LaunchOptions) {
-    const env = buildClaudeEnv(opts);
     const args = buildClaudeArgs(opts);
+    // In a container the gateway is not on localhost any more — it is on the host.
+    const env = buildClaudeEnv(
+      opts.sandbox ? { ...opts, baseUrl: containerizeUrl(opts.baseUrl) } : opts,
+    );
+
     if (opts.dryRun) {
-      console.error("--- claude dry run ---");
-      console.error("env:", JSON.stringify(env, null, 2));
-      console.error("args:", args);
+      console.error(`--- claude ${opts.sandbox ? "sandbox " : ""}dry run ---`);
+      console.error("env:", JSON.stringify(redactSecrets(env), null, 2));
+      if (opts.sandbox) {
+        const spec = claudeSpec();
+        console.error("image:", resolveImage(spec));
+        console.error(
+          "docker:",
+          buildSandboxArgs({
+            image: resolveImage(spec),
+            spec,
+            bin: "claude",
+            args,
+            env: redactSecrets(env),
+            cwd: process.cwd(),
+            tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+            gitconfig: gitconfigIfPresent(),
+          }).join(" "),
+        );
+      } else {
+        console.error("args:", args);
+      }
       return;
     }
+
+    if (opts.sandbox) {
+      console.error(`claude: launching sandboxed with model=${opts.model} yolo=${opts.yolo}`);
+      await runSandbox(claudeSpec(), "claude", args, env);
+      return;
+    }
+
     console.error(`claude: launching with model=${opts.model} yolo=${opts.yolo}`);
     await runHost("claude", args, env);
   },

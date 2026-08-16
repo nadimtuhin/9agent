@@ -18,6 +18,23 @@ done
 # exit-code passthrough: stub agent exits 7, 9agent must too
 docker compose -f docker-compose.test.yml up --exit-code-from test-exit-code test-exit-code
 
+# --sandbox --print-only composes the docker argv without a daemon present
+out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-sandbox-print test-sandbox-print 2>&1) || rc=$?
+echo "$out"
+[ "${rc:-0}" = "0" ] || { echo "FAIL: test-sandbox-print exited ${rc}"; exit 1; }
+grep -q "host.docker.internal:host-gateway" <<<"$out" || { echo "FAIL: sandbox argv missing --add-host"; exit 1; }
+# mock-router is not loopback, so it must pass through UNCHANGED. The
+# loopback->host.docker.internal rewrite is covered by containerizeUrl unit tests.
+grep -q "ANTHROPIC_BASE_URL=http://mock-router:20128/v1" <<<"$out" || { echo "FAIL: non-loopback gateway was rewritten"; exit 1; }
+grep -q "ANTHROPIC_AUTH_TOKEN=sk_9r…redacted" <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
+
+# --sandbox on an agent that cannot honour it must ERROR, never run unsandboxed
+if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-sandbox-refused test-sandbox-refused 2>&1); then
+  echo "$out"; echo "FAIL: pi --sandbox should have exited non-zero"; exit 1
+fi
+echo "$out"
+grep -q -- "--sandbox is claude-only" <<<"$out" || { echo "FAIL: pi --sandbox failed for the wrong reason"; exit 1; }
+
 # expected to FAIL with a specific, readable message — not hang, not a build error
 if out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-no-tty test-no-tty 2>&1); then
   echo "$out"; echo "FAIL: test-no-tty should have exited non-zero"; exit 1

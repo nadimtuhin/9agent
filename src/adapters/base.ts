@@ -5,6 +5,7 @@ export interface LaunchOptions {
   yolo: boolean;
   extraArgs: string[];
   dryRun?: boolean; // print resolved env+args, don't spawn
+  sandbox?: boolean; // run the agent inside a container instead of on the host
 }
 
 export interface AgentAdapter {
