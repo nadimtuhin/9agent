@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,10 +42,27 @@ export interface SandboxSpec {
   repo: string;
   /** Path to the Dockerfile that builds this image. */
   dockerfile: string;
+  /** Build context. Defaults to the Dockerfile's directory. */
+  buildContext?: string;
   /** Host directory holding the agent's own config, e.g. ~/.claude */
   agentHome: string;
   /** Where that directory is mounted inside the container. */
   containerHome: string;
+  /**
+   * Container user. `undefined` means don't pass --user at all: hermes' wrapper
+   * rejects an arbitrary UID outright and wants HERMES_UID/GID instead, so
+   * "which user" is a per-agent contract, not a global convention.
+   */
+  user?: string;
+  /** Where the container expects ~/.gitconfig, which follows $HOME per image. */
+  gitconfigTarget: string;
+  /** Env every sandboxed run of this agent needs, e.g. hermes' UID mapping. */
+  specEnv?: Record<string, string>;
+  /**
+   * Paths under agentHome that the HOST executes and so must be re-mounted
+   * read-only. Empty for agents whose config the host never runs.
+   */
+  hostExecutedPaths?: string[];
 }
 
 /**
@@ -140,8 +165,7 @@ export function buildSandboxArgs(opts: {
     // no default SIGTERM handler. This is what makes the exit contract hold.
     "--init",
     ...(tty ? ["-it"] : ["-i"]),
-    "--user",
-    "node",
+    ...(spec.user ? ["--user", spec.user] : []),
     // Always explicit: host.docker.internal resolves without this on OrbStack and
     // Docker Desktop, but not on plain Linux Docker.
     "--add-host",
@@ -156,10 +180,10 @@ export function buildSandboxArgs(opts: {
       `${join(spec.agentHome, rel)}:${spec.containerHome}/${rel}:ro`,
     ]),
     ...extraMounts.flatMap((m) => ["-v", m]),
-    ...(gitconfig ? ["-v", `${gitconfig}:/home/node/.gitconfig:ro`] : []),
+    ...(gitconfig ? ["-v", `${gitconfig}:${spec.gitconfigTarget}:ro`] : []),
     "-w",
     "/workspace",
-    ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+    ...Object.entries({ ...spec.specEnv, ...env }).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
     image,
     bin,
     ...args,
@@ -177,6 +201,9 @@ export function claudeSpec(): SandboxSpec {
     dockerfile: dockerfilePath("claude.Dockerfile"),
     agentHome: join(homedir(), ".claude"),
     containerHome: "/home/node/.claude",
+    user: "node",
+    gitconfigTarget: "/home/node/.gitconfig",
+    hostExecutedPaths: HOST_EXECUTED_PATHS,
   };
 }
 
@@ -186,6 +213,43 @@ export function piSpec(): SandboxSpec {
     dockerfile: dockerfilePath("pi.Dockerfile"),
     agentHome: join(homedir(), ".pi"),
     containerHome: "/home/node/.pi",
+    user: "node",
+    gitconfigTarget: "/home/node/.gitconfig",
+    hostExecutedPaths: HOST_EXECUTED_PATHS,
+  };
+}
+
+/** Where hermes' own checkout lives; it ships the only Dockerfile that can build it. */
+export function hermesCheckout(): string {
+  return join(homedir(), ".hermes", "hermes-agent");
+}
+
+/**
+ * Hermes does not fit the node-image convention, and cannot be made to.
+ *
+ * Upstream refuses pip/wheel installs, so we build *their* image from *their*
+ * checkout rather than writing a Dockerfile of our own. That image then imposes
+ * two things their `main-wrapper.sh` enforces: `--user <arbitrary uid>` is a
+ * hard error (pass HERMES_UID/GID instead), and $HOME inside the container is
+ * /opt/data, not /home/node. `--init` is explicitly supported — their
+ * entrypoint dispatcher detects a non-PID-1 start and skips s6-overlay.
+ */
+export function hermesSpec(): SandboxSpec {
+  const checkout = hermesCheckout();
+  return {
+    repo: "9agent/hermes",
+    dockerfile: join(checkout, "Dockerfile"),
+    buildContext: checkout,
+    agentHome: join(homedir(), ".hermes"),
+    containerHome: "/opt/data",
+    user: undefined, // their wrapper rejects --user; see HERMES_UID below
+    gitconfigTarget: "/opt/data/.gitconfig",
+    specEnv: {
+      HERMES_UID: String(process.getuid?.() ?? 1000),
+      HERMES_GID: String(process.getgid?.() ?? 1000),
+    },
+    // The host runs nothing out of ~/.hermes, so there is nothing to lock down.
+    hostExecutedPaths: [],
   };
 }
 
@@ -211,13 +275,61 @@ export async function ensureImage(spec: SandboxSpec, image: string): Promise<voi
     // not built yet — fall through
   }
 
-  // A silent 60-second hang is the worst possible first run, so stream the build.
-  console.error(`9agent: building sandbox image ${image} (first run, ~60s)…`);
+  // A silent multi-minute hang is the worst possible first run, so stream the build.
+  console.error(`9agent: building sandbox image ${image} (first run)…`);
   await runHost(
     "docker",
-    ["build", "-f", spec.dockerfile, "-t", image, dirname(spec.dockerfile)],
+    [
+      "build",
+      "-f",
+      spec.dockerfile,
+      "-t",
+      image,
+      spec.buildContext ?? dirname(spec.dockerfile),
+    ],
     {},
   );
+}
+
+/**
+ * Bind the targets of symlinks that point out of the agent's home.
+ *
+ * A bind mount carries symlinks across verbatim, so `~/.hermes/SOUL.md ->
+ * ~/.claude/persona-core.md` arrives in the container as a link to a path that
+ * is not mounted. Reads then fail with ENOENT, and an agent that tries to
+ * *create* the missing file crashes on it — which is exactly how this was found.
+ *
+ * Mounted read-only: the target lives outside the sandbox, so the agent may
+ * read the config the user linked in, never rewrite it.
+ */
+export function escapingSymlinkMounts(
+  agentHome: string,
+  containerHome: string,
+): string[] {
+  let entries: string[];
+  let root: string;
+  try {
+    entries = readdirSync(agentHome);
+    // Resolve the home too, or the "is it inside?" test compares a resolved
+    // target against an unresolved prefix and calls every link an escapee.
+    // (/var is a symlink to /private/var on macOS — that is not a corner case.)
+    root = realpathSync(agentHome);
+  } catch {
+    return [];
+  }
+  return entries.flatMap((name) => {
+    const path = join(agentHome, name);
+    let target: string;
+    try {
+      if (!lstatSync(path).isSymbolicLink()) return [];
+      target = realpathSync(path); // resolves chains; throws on a dangling link
+    } catch {
+      return []; // already broken on the host — not ours to fix
+    }
+    const inside = target === root || target.startsWith(root + "/");
+    if (inside || target.includes(":")) return [];
+    return [`${target}:${containerHome}/${name}:ro`];
+  });
 }
 
 export function gitconfigIfPresent(): string | undefined {
@@ -226,8 +338,11 @@ export function gitconfigIfPresent(): string | undefined {
 }
 
 /** Only mount what exists — Docker errors on a bind whose source is missing. */
-export function readOnlyPathsIn(agentHome: string): string[] {
-  return HOST_EXECUTED_PATHS.filter((rel) => existsSync(join(agentHome, rel)));
+export function readOnlyPathsIn(
+  agentHome: string,
+  paths: string[] = HOST_EXECUTED_PATHS,
+): string[] {
+  return paths.filter((rel) => existsSync(join(agentHome, rel)));
 }
 
 /**
@@ -278,8 +393,11 @@ export async function runSandbox(
     cwd,
     tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
     gitconfig: gitconfigIfPresent(),
-    readOnlyPaths: readOnlyPathsIn(spec.agentHome),
-    extraMounts,
+    readOnlyPaths: readOnlyPathsIn(spec.agentHome, spec.hostExecutedPaths),
+    extraMounts: [
+      ...escapingSymlinkMounts(spec.agentHome, spec.containerHome),
+      ...extraMounts,
+    ],
   });
   await runHost("docker", argv, {});
 }

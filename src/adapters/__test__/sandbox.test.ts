@@ -1,10 +1,21 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   assertMountableCwd,
   claudeSpec,
+  escapingSymlinkMounts,
+  hermesCheckout,
+  hermesSpec,
   containerizeConfigText,
   piSpec,
   buildSandboxArgs,
@@ -19,6 +30,8 @@ const SPEC: SandboxSpec = {
   dockerfile: "/pkg/docker/claude.Dockerfile",
   agentHome: "/home/u/.claude",
   containerHome: "/home/node/.claude",
+  user: "node",
+  gitconfigTarget: "/home/node/.gitconfig",
 };
 
 describe("containerizeUrl", () => {
@@ -116,8 +129,70 @@ describe("every agent spec", () => {
     }
   });
   it("gives each agent its own image repo", () => {
-    const repos = [claudeSpec(), piSpec()].map((s) => s.repo);
-    assert.equal(new Set(repos).size, 2);
+    const repos = [claudeSpec(), piSpec(), hermesSpec()].map((s) => s.repo);
+    assert.equal(new Set(repos).size, 3);
+  });
+});
+
+describe("escapingSymlinkMounts", () => {
+  // Found the hard way: ~/.hermes/SOUL.md -> ~/.claude/persona-core.md arrived
+  // in the container as a dangling link, and hermes crashed writing through it.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "9agent-sym-")));
+  const home = join(root, "home");
+  const outside = join(root, "outside.md");
+  mkdirSync(home);
+  writeFileSync(outside, "x");
+  writeFileSync(join(home, "real.md"), "x");
+  symlinkSync(outside, join(home, "escapes.md"));
+  symlinkSync(join(home, "real.md"), join(home, "stays.md"));
+  symlinkSync(join(root, "gone.md"), join(home, "dangling.md"));
+  const mounts = escapingSymlinkMounts(home, "/opt/data");
+
+  it("binds a symlink whose target leaves the mounted home", () => {
+    assert.deepEqual(mounts, [`${outside}:/opt/data/escapes.md:ro`]);
+  });
+  it("leaves links that stay inside alone — the bind already carries them", () => {
+    assert.ok(!mounts.some((m) => m.includes("stays.md")));
+  });
+  it("ignores a link already broken on the host", () => {
+    assert.ok(!mounts.some((m) => m.includes("dangling.md")));
+  });
+  it("returns nothing when the agent home does not exist", () => {
+    assert.deepEqual(escapingSymlinkMounts(join(root, "nope"), "/opt/data"), []);
+  });
+});
+
+describe("hermesSpec", () => {
+  // Their main-wrapper.sh errors out on an arbitrary --user UID and tells you
+  // to pass HERMES_UID/GID instead. If these two ever regress the container
+  // refuses to start, with a message about NAS UIDs that explains nothing.
+  const argv = () =>
+    buildSandboxArgs({
+      image: "img",
+      spec: hermesSpec(),
+      bin: "hermes",
+      args: [],
+      env: {},
+      cwd: "/w",
+      tty: false,
+      gitconfig: "/home/u/.gitconfig",
+    });
+
+  it("never passes --user, which upstream rejects outright", () => {
+    assert.ok(!argv().includes("--user"));
+  });
+  it("passes the host UID/GID upstream asks for instead", () => {
+    const a = argv();
+    assert.ok(a.some((x) => x.startsWith("HERMES_UID=")));
+    assert.ok(a.some((x) => x.startsWith("HERMES_GID=")));
+  });
+  it("mounts config and gitconfig under /opt/data, hermes' $HOME", () => {
+    const a = argv();
+    assert.ok(a.includes(`${hermesSpec().agentHome}:/opt/data`));
+    assert.ok(a.includes("/home/u/.gitconfig:/opt/data/.gitconfig:ro"));
+  });
+  it("builds from hermes' own checkout, not a Dockerfile we wrote", () => {
+    assert.equal(hermesSpec().buildContext, hermesCheckout());
   });
 });
 
