@@ -65,6 +65,7 @@ whether they were meant for the agent or for itself.
 
 | Flag | Description | Default |
 |------|-------------|---------|
+| `-V, --version` | Print the 9agent version | — |
 | `-a, --agent <name>` | Agent name or alias (`c`, `cc`, `p`, `h`) | interactive picker |
 | `-m, --model <id>` | Model ID | interactive search |
 | `--yolo` | Skip permissions / dangerous mode | safe |
@@ -108,10 +109,6 @@ Their image also imposes its own container contract, which 9agent honours: no
 `--user` (their wrapper rejects an arbitrary UID — it takes `HERMES_UID`/
 `HERMES_GID` instead), and `$HOME` is `/opt/data`, not `/home/node`.
 
-Symlinks in an agent's home that point *outside* it — `~/.hermes/SOUL.md ->
-~/.claude/persona-core.md`, say — are bind-mounted at their targets, read-only.
-A bind mount copies the link verbatim, so without this they arrive dangling.
-
 ### What the sandbox does and does not protect
 
 It is a **blast-radius limiter, not a security boundary against a hostile agent.**
@@ -152,9 +149,10 @@ Also worth knowing:
 Does **not** protect:
 - **Your working directory.** Mounted read-write by design; a sandbox that cannot
   edit your code is useless.
-- **The rest of `~/.claude`.** Mounted read-write, and it holds your OAuth tokens
-  and session history. The executable surface above is locked down; the
-  credentials are not.
+- **The rest of the agent's home** — `~/.claude`, `~/.pi`, or `~/.hermes`.
+  Mounted read-write, and it holds OAuth tokens, session history, and in hermes'
+  case a `.env`. The executable surface above is locked down; the credentials
+  are not.
 - **The network.** Full outbound access, including your host's loopback — every
   other local service and dev server is reachable.
 - **The gateway key.** Passed as an env var, so it is visible to anything that can
@@ -165,9 +163,11 @@ Does **not** protect:
 - Exit codes **125–127** are ambiguous in sandbox mode: Docker uses them for its
   own failures, so they cannot be distinguished from an agent that exits 125–127.
   Every other code, including signal deaths (`128 + signum`), passes through exactly.
-- The agent version is **pinned in `docker/claude.Dockerfile`**. That is what makes
-  the image tag a real content identity — a floating version would leave the cache
-  key unchanged while the contents drifted. Bump the pin to upgrade.
+- Agent versions are **pinned in `docker/*.Dockerfile`**. That is what makes the
+  image tag a real content identity — a floating version would leave the cache key
+  unchanged while the contents drifted. Bump the pin to upgrade. Hermes is the
+  exception: its image comes from your own checkout, so its tag folds in that
+  checkout's commit instead.
 - Your host `settings.json` is mounted in, so hooks configured there are attempted
   inside the container. Any that point at a host binary path will fail with
   `not found` on stderr — noisy but harmless, since a missing binary cannot run.
@@ -208,10 +208,20 @@ Implement the `AgentAdapter` interface in `src/adapters/` and push to `REGISTRY`
 export const myAdapter: AgentAdapter = {
   name: "my-agent",
   aliases: ["ma"],
+  supportsSandbox: true,          // omit and `--sandbox` is refused, not ignored
   async detect() { return /* boolean */; },
   async launch(opts: LaunchOptions) { /* spawn it */ },
 };
 ```
+
+`supportsSandbox` defaults to refusing. That is deliberate: silently running
+unsandboxed when someone asked for `--sandbox` is the dangerous failure, so a new
+adapter has to say the word. Set `sandboxRefusal` to explain *why* if it cannot.
+
+To give the adapter a sandbox, add a `SandboxSpec` in `src/runner/sandbox.ts`. The
+spec is where per-agent container contracts live — which user to run as (or none,
+as hermes requires), where `$HOME` is, which paths the host executes and must
+therefore be mounted read-only.
 
 ## Development
 
@@ -223,6 +233,25 @@ npm run check      # typecheck, build, unit tests
 npm run test:docker # integration harness (needs Docker)
 ```
 
-## Status
+## Design
 
-Host runner, plus Docker `--sandbox` for every agent (see [Sandbox](#sandbox)).
+9agent is a **launcher**: it resolves a model, execs the agent, and mirrors its
+exit code. It is not a session manager and not a config broker. Two rules follow
+from that, and they are why some things are more awkward than they could be:
+
+- **It never rewrites a config file you own.** An agent that routes through a
+  config file gets a rewritten *copy* mounted read-only ([ShadowConfig](CONTEXT.md));
+  your original is opened for reading and never for writing.
+- **It never supervises what it starts.** No wrapping, no proxying, no restart
+  logic — so exit codes and signals are the agent's own.
+
+[CONTEXT.md](CONTEXT.md) is the vocabulary; [ADR-0001](docs/adr/0001-launcher-not-session-manager.md)
+records the decision and what it trades away.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+MIT
