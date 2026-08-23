@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 - 2026-08-23
+
+### Fixed
+
+- **`--model` was never validated.** The picker only offered ids the gateway
+  serves, but an explicit `--model` bypassed that check, so a typo launched the
+  agent against a nonexistent model and failed on its first request instead of
+  at launch. It now exits 1 with the near-miss ids, or a pointer to the picker.
+
+### Added
+
+- A demo GIF of the agent → model → mode picker in the README, with
+  `docs/demo.tape` as reproducible source.
+- Contributing and License sections, plus npm/CI/license/node badges.
+
 ## 0.2.1 - 2026-08-23
 
 ### Security
