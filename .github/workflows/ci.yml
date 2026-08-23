@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # `npm run check` is the same gate contributors run locally: typecheck, build,
+  # lint, unit tests. Keeping CI to that one command means the two can't drift.
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  # Separate job: this one drives a real Docker daemon through
+  # docker-compose.test.yml, so it is minutes rather than seconds.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:docker
+
+  # The tarball is what users actually install, and `files` governs it -- a
+  # missing entry only shows up here, never in the unit tests.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm pack
+      - run: npm run build && node dist/index.js --version
