@@ -8,6 +8,11 @@
   9agent@latest`). `--dry-run` prints the command without running it. Typing
   `9agent update` before this release silently forwarded `update` to the agent
   as a passthrough argument, so it looked like a no-op.
+- **`9agent doctor`** checks the four things that make a launch fail before it
+  starts: the gateway answers `/models`, a key resolved and from which source,
+  which agents are installed, and whether the Docker daemon is up for
+  `--sandbox`. Exits 1 if any check fails. The key's **source** is named; its
+  value is never printed.
 
 ### Changed
 

@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
 import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { runUpdate } from "./update.js";
+import { runDoctor, defaultDoctorDeps } from "./doctor.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { piAdapter } from "./adapters/pi.js";
@@ -23,6 +24,32 @@ const pkg = createRequire(import.meta.url)("../package.json") as { version: stri
 // Declared before the default action: commander matches a subcommand name
 // ahead of the root command's `[args...]`, which would otherwise forward
 // `update` to the agent as a passthrough arg.
+program
+  .command("doctor")
+  .description("check the gateway, key, installed agents, and Docker")
+  // Repeated here rather than inherited: --gateway/--key sit on the root
+  // command, and commander does not pass those down to a subcommand.
+  // No default here: an explicit `undefined` is what distinguishes "not passed"
+  // from "passed the default", so the root/env fallback below stays reachable
+  // whichever command's option set captured the flag.
+  .option("--gateway <url>", "9Router base URL")
+  .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
+  .action(async (opts: { gateway?: string; key?: string }) => {
+    const root = program.opts<{ gateway?: string; key?: string }>();
+    const gateway =
+      opts.gateway ?? root.gateway ?? process.env.NINEROUTER_URL ?? "http://localhost:20128/v1";
+    const keyFlag = opts.key ?? root.key;
+    const { report, exitCode } = await runDoctor(
+      defaultDoctorDeps({
+        gateway,
+        key: resolveKey(keyFlag),
+        keyFlag,
+      }),
+    );
+    process.stdout.write(report);
+    process.exit(exitCode);
+  });
+
 program
   .command("update")
   .description("update 9agent to the latest published version")
