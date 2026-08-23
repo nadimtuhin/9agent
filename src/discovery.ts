@@ -42,6 +42,47 @@ function writeCache(path: string, models: ModelEntry[]): void {
   }
 }
 
+/** Where the "still loading" hint is drawn. Injected rather than reaching for
+ *  process.stderr so a test can assert that nothing was written. */
+export interface HintTarget {
+  write: (s: string) => boolean;
+}
+
+/**
+ * Await a gateway fetch that was started earlier — before the agent picker, so
+ * its latency hides inside the time the user spends choosing. Draws a hint only
+ * if the fetch is still in flight by the next event-loop turn, so a fast gateway
+ * (or a warm one) produces no flicker at all.
+ */
+export async function awaitModels(
+  pending: Promise<ModelEntry[]>,
+  opts: { stream: HintTarget; isTTY: boolean },
+): Promise<ModelEntry[]> {
+  let settled = false;
+  pending.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await new Promise((r) => {
+    setImmediate(r);
+  });
+
+  if (settled || !opts.isTTY) return pending;
+
+  opts.stream.write("Loading models…");
+  try {
+    return await pending;
+  } finally {
+    // \r\x1b[K — column 0, clear to end of line, so the hint does not linger
+    // above the picker (or above the error, if the fetch rejected).
+    opts.stream.write("\r\x1b[K");
+  }
+}
+
 export async function discoverModels(
   baseUrl: string,
   apiKey: string,

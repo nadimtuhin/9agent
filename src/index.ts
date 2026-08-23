@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
-import { discoverModels } from "./discovery.js";
+import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
 import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
@@ -59,10 +59,12 @@ interface ProgramOpts {
  *  so a typo fails at launch instead of on the agent's first request. */
 async function resolveModel(
   flag: string | undefined,
-  gateway: string,
-  key: string,
+  modelsPromise: Promise<ModelEntry[]>,
 ): Promise<string> {
-  const models = await discoverModels(gateway, key);
+  const models = await awaitModels(modelsPromise, {
+    stream: process.stderr,
+    isTTY: process.stderr.isTTY,
+  });
 
   if (flag) {
     assertModelExists(
@@ -98,6 +100,17 @@ async function main(opts: ProgramOpts) {
     args: opts.args ?? [],
   };
 
+  // 0. Start the gateway fetch before the agent picker, so its latency hides
+  //    inside the time the user spends choosing.
+  const modelsPromise = discoverModels(options.gateway, options.key);
+  // Between here and the await in resolveModel there is no consumer, and an
+  // unhandled rejection is a hard process exit in Node 15+. Mark it handled now;
+  // the real await below still rethrows.
+  modelsPromise.catch(() => {
+    // Intentionally empty: this only marks the rejection handled. resolveModel
+    // awaits the same promise and rethrows there, where the message is useful.
+  });
+
   // 1. Pick agent
   let adapter = REGISTRY.find(
     (a) => a.name === options.agent || a.aliases?.includes(options.agent ?? ""),
@@ -132,7 +145,7 @@ async function main(opts: ProgramOpts) {
   if (options.sandbox) assertSandboxSupported(adapter);
 
   // 2. Pick model
-  const model = await resolveModel(options.model, options.gateway, options.key);
+  const model = await resolveModel(options.model, modelsPromise);
 
   // 3. Pick mode
   if (options.yolo && options.yes === "safe") {
