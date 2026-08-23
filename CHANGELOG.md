@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **`--help` printed the resolved gateway key.** commander renders an option's
+  default value, so once `NINEROUTER_KEY` or `LOCAL_9ROUTER_KEY` was set,
+  `9agent --help` echoed a live credential into issue reports, CI logs, and
+  screen shares. The key is now resolved after parsing and `--help` names the
+  env vars instead. **If you ran 0.2.0 with a key in the environment, rotate
+  it.**
+
+### Added
+
+- `LOCAL_9ROUTER_KEY` is read as a key fallback after `NINEROUTER_KEY`. A
+  sandboxed agent reaches the gateway through `host.docker.internal`, so 9Router
+  sees a remote client and rejects the `sk_9router` placeholder -- `--sandbox`
+  looped on 401 until you passed `--key` by hand.
+- `NINEAGENT_SANDBOX_ROOT=1` builds a claude image with passwordless `sudo`
+  (`docker/claude-root.Dockerfile`). Kept as a separate Dockerfile so the default
+  image's security claim stays true and reviewable.
+
+### Fixed
+
+- The claude sandbox image installs the shared libraries Chromium links against.
+  Playwright and Puppeteer fetch their own browser binary but not its system
+  deps, and the sandbox drops to `USER node` with no root, so there was no way to
+  add them at runtime.
+
 ## 0.2.0
 
 First published release. 0.1.0 was never on npm.

@@ -173,4 +173,4 @@ npm run test:docker  # integration harness (needs Docker)
 npm run release      # gate, build, verify the tarball, publish
 ```
 
-[Changelog](CHANGELOG.md) · MIT
+[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · MIT
