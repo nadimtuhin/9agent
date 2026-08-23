@@ -1,5 +1,16 @@
 node_modules/
 dist/
 
+# npm pack / publish output
+*.tgz
+npm-debug.log*
+
+# macOS
+.DS_Store
+
+# Agent tooling scratch dirs, not part of this project
+.omh/
+.omc/
+
 # tdd-backlog working dir
 backlog/
