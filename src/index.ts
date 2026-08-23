@@ -27,7 +27,7 @@ program
   .option("-m, --model <id>", "model ID (skip picker)")
   .option("--yolo", "skip permissions / dangerous mode")
   .option("--gateway <url>", "9Router base URL", process.env.NINEROUTER_URL ?? "http://localhost:20128/v1")
-  .option("--key <token>", "9Router API key", process.env.NINEROUTER_KEY ?? "sk_9router")
+  .option("--key <token>", "9Router API key", process.env.NINEROUTER_KEY ?? process.env.LOCAL_9ROUTER_KEY ?? "sk_9router")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
   .option("--sandbox", "run the agent in a Docker container")
