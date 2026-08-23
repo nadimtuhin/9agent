@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>9agent — one launcher for Claude Code, Pi, and Hermes</title>
+<meta name="description" content="9agent is a CLI that resolves a model from your OpenAI-compatible gateway and launches Claude Code, Pi, or Hermes — optionally sandboxed in Docker. Node 20+, MIT licensed.">
+<link rel="canonical" href="https://9agent.piply.xyz/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="author" content="Omar Faruque Tuhin">
+<meta name="theme-color" content="#0c0d10">
+<meta name="color-scheme" content="dark">
+
+<meta property="og:site_name" content="9agent">
+<!-- Social titles stay short on purpose: Facebook gives the card ~2 lines total
+     and drops og:description entirely when the title wraps. The long form
+     lives in <title>, where search engines want it. -->
+<meta property="og:title" content="9agent — CLI agent launcher">
+<meta property="og:description" content="One launcher for Claude Code, Pi, and Hermes. Pick a model from your gateway, launch the agent, optionally in Docker.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://9agent.piply.xyz/">
+<meta property="og:image" content="https://9agent.piply.xyz/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:alt" content="9agent — one launcher for Claude Code, Pi, and Hermes. Install with npm i -g 9agent.">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="9agent — CLI agent launcher">
+<meta name="twitter:description" content="One launcher for Claude Code, Pi, and Hermes. Pick a model from your gateway, launch the agent, optionally in Docker.">
+<meta name="twitter:image" content="https://9agent.piply.xyz/og.png">
+<meta name="twitter:image:alt" content="9agent — one launcher for Claude Code, Pi, and Hermes.">
+
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "9agent",
+  "description": "A CLI that resolves a model from an OpenAI-compatible gateway and launches Claude Code, Pi, or Hermes, optionally sandboxed in Docker.",
+  "url": "https://9agent.piply.xyz/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux, Windows",
+  "softwareRequirements": "Node.js >= 20",
+  "softwareVersion": "0.3.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "codeRepository": "https://github.com/nadimtuhin/9agent",
+  "downloadUrl": "https://www.npmjs.com/package/9agent",
+  "image": "https://9agent.piply.xyz/og.png",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": {
+    "@type": "Person",
+    "name": "Omar Faruque Tuhin",
+    "url": "https://github.com/nadimtuhin"
+  }
+}
+</script>
+<style>
+  :root {
+    --bg: #0c0d10;
+    --panel: #14161b;
+    --line: #23262e;
+    --fg: #e6e8ee;
+    --muted: #969cab;
+    --accent: #7dd3a0;
+    --accent-dim: #2b5f42;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 var(--mono);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+
+  header { border-bottom: 1px solid var(--line); }
+  nav {
+    display: flex; align-items: center; gap: 20px;
+    padding: 16px 0; font-size: 14px; flex-wrap: wrap;
+  }
+  nav .brand { font-weight: 700; color: var(--fg); margin-right: auto; }
+  nav .brand span { color: var(--accent); }
+  nav a { color: var(--muted); }
+  nav a:hover { color: var(--fg); text-decoration: none; }
+
+  .hero { padding: 64px 0 40px; }
+  h1 { font-size: clamp(38px, 8vw, 60px); line-height: 1.05; margin: 0 0 18px; letter-spacing: -2px; }
+  h1 span { color: var(--accent); }
+  .tag { font-size: clamp(16px, 3vw, 20px); color: var(--muted); max-width: 34em; margin: 0 0 28px; line-height: 1.5; }
+
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: 14px;
+    margin: 0 0 14px;
+    line-height: 1.7;
+  }
+  pre .c { color: var(--muted); }
+  pre .p { color: var(--accent-dim); user-select: none; }
+  code { font-family: var(--mono); }
+  p code, li code, td code {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; font-size: 0.9em;
+  }
+
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 6px;
+    border: 1px solid var(--line); color: var(--fg); font-size: 14px;
+  }
+  .btn:hover { border-color: var(--accent); text-decoration: none; }
+  .btn.primary { background: var(--accent); color: #0c0d10; border-color: var(--accent); font-weight: 700; }
+
+  figure { margin: 44px 0 0; }
+  figure img {
+    width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px;
+  }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 10px; }
+
+  section { padding: 48px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 24px; margin: 0 0 8px; letter-spacing: -0.5px; }
+  h2::before { content: "› "; color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 22px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 400; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  td:first-child { white-space: nowrap; color: var(--accent); }
+  .scroll { overflow-x: auto; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">9<span>agent</span></a>
+      <a href="#install">Install</a>
+      <a href="#flags">Flags</a>
+      <a href="#agents">Agents</a>
+      <a href="#sandbox">Sandbox</a>
+      <a href="https://github.com/nadimtuhin/9agent">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="hero">
+    <h1>One launcher for<br>Claude Code, Pi,<br>and <span>Hermes</span>.</h1>
+    <p class="tag">Pick a model from your gateway, launch the agent, optionally in Docker. No session manager, no proxy — it execs the agent and gets out of the way.</p>
+
+    <pre><span class="p">$</span> npm i -g 9agent
+<span class="p">$</span> 9agent                      <span class="c"># prompts: agent → model → mode</span></pre>
+
+    <div class="btns">
+      <a class="btn primary" href="https://www.npmjs.com/package/9agent">npm</a>
+      <a class="btn" href="https://github.com/nadimtuhin/9agent">Source</a>
+      <a class="btn" href="https://github.com/nadimtuhin/9router">9Router</a>
+    </div>
+
+    <figure>
+      <img src="demo.gif" alt="9agent picking an agent, searching the gateway model catalog, choosing a permission mode, then launching the agent and printing its reply" loading="lazy" width="1200" height="700">
+      <figcaption>Agent picker → searchable model catalog → permission mode → launch.</figcaption>
+    </figure>
+  </div>
+
+  <section id="install">
+    <h2>Skip the prompts</h2>
+    <p class="lede">Every prompt has a flag. Scriptable end to end.</p>
+    <pre><span class="p">$</span> 9agent -a claude -m ag/gemini-3.7-flash-high --yolo
+<span class="p">$</span> 9agent -a claude -m ag/gemini-3.7-flash-high --yes safe --sandbox
+<span class="p">$</span> 9agent -a claude -m ag/gemini-3.7-flash-high --yes safe -- --verbose  <span class="c"># passthrough</span></pre>
+    <p class="lede" style="margin:22px 0 12px">Requirements</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Need</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Node &gt;= 20</td><td><code>fetch</code>, <code>import.meta</code></td></tr>
+          <tr><td>A gateway</td><td>Serving <code>GET /v1/models</code> — where the model list comes from. Built for <a href="https://github.com/nadimtuhin/9router">9Router</a>; anything OpenAI-compatible works</td></tr>
+          <tr><td>An agent</td><td>One of <code>claude</code>, <code>pi</code>, <code>hermes</code>. 9agent launches these, it doesn't bundle them</td></tr>
+          <tr><td>Docker</td><td>Only for <code>--sandbox</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede" style="margin-top:18px">No gateway? You get <code>Is 9Router running?</code> and exit 1 — never a hang.</p>
+  </section>
+
+  <section id="flags">
+    <h2>Flags</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td>-a, --agent</td><td><code>claude</code>|<code>pi</code>|<code>hermes</code>, or alias <code>c</code>/<code>cc</code>/<code>p</code>/<code>h</code></td><td>picker</td></tr>
+          <tr><td>-m, --model</td><td>Model id</td><td>searchable picker</td></tr>
+          <tr><td>--sandbox</td><td>Run the agent in Docker</td><td>host</td></tr>
+          <tr><td>--yolo</td><td>Skip permission prompts</td><td>safe</td></tr>
+          <tr><td>--yes &lt;mode&gt;</td><td>Non-interactive: <code>safe</code>|<code>dangerous</code></td><td>—</td></tr>
+          <tr><td>--gateway &lt;url&gt;</td><td>Gateway base URL</td><td><code>http://localhost:20128/v1</code></td></tr>
+          <tr><td>--key &lt;token&gt;</td><td>Gateway key</td><td><code>sk_9router</code> placeholder</td></tr>
+          <tr><td>--print-only</td><td>Print the resolved env + argv, spawn nothing</td><td>—</td></tr>
+          <tr><td>-V, --version</td><td>Print version</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede" style="margin-top:18px">The gateway URL comes from <code>--gateway</code>, else <code>NINEROUTER_URL</code>. The key comes from <code>--key</code>, else <code>NINEROUTER_KEY</code>, else <code>LOCAL_9ROUTER_KEY</code>, else the <code>sk_9router</code> placeholder — a local placeholder, not a credential.</p>
+  </section>
+
+  <section id="agents">
+    <h2>Agents</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Agent</th><th><code>--yolo</code> becomes</th><th>Gateway routing</th></tr></thead>
+        <tbody>
+          <tr><td>Claude Code</td><td><code>--dangerously-skip-permissions</code></td><td>env vars</td></tr>
+          <tr><td>Pi</td><td>nothing — Pi has no permission system</td><td><code>~/.pi/agent/models.json</code></td></tr>
+          <tr><td>Hermes</td><td><code>--yolo</code></td><td><code>9router</code> provider in <code>~/.hermes/config.yaml</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede" style="margin-top:18px">Pi and Hermes have no env var for the base URL, so the gateway must already be in their config. 9agent reads those files; it never writes them.</p>
+  </section>
+
+  <section id="sandbox">
+    <h2>Sandbox</h2>
+    <p class="lede">A blast-radius limiter, not a security boundary against a hostile agent.</p>
+    <pre><span class="p">$</span> 9agent -a claude -m ag/gemini-3.7-flash-high --yes safe --sandbox</pre>
+    <p class="lede">Only cwd and the agent home are mounted, and anything your host executes — hooks, plugins, settings — is mounted read-only. <a href="https://github.com/nadimtuhin/9agent/blob/main/docs/sandbox.md">The full threat model</a> has the per-agent details and known limits.</p>
+  </section>
+
+  <section id="design">
+    <h2>Design</h2>
+    <p class="lede">9agent resolves a model, execs the agent, and mirrors its exit code. It is not a session manager and not a config broker. Two rules follow:</p>
+    <div class="cards">
+      <div class="card">
+        <h3>Never rewrites a config you own</h3>
+        <p>Config-driven agents get a ShadowConfig copy instead.</p>
+      </div>
+      <div class="card">
+        <h3>Never supervises what it starts</h3>
+        <p>No wrapping, no proxying, no restarts — so exit codes and signals are the agent's own.</p>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:18px"><a href="https://github.com/nadimtuhin/9agent/blob/main/CONTEXT.md">CONTEXT.md</a> is the vocabulary. <a href="https://github.com/nadimtuhin/9agent/blob/main/docs/adr/0001-launcher-not-session-manager.md">ADR-0001</a> records what this trades away.</p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    MIT · by <a href="https://github.com/nadimtuhin">Omar Faruque Tuhin</a> ·
+    <a href="https://github.com/nadimtuhin/9agent">GitHub</a> ·
+    <a href="https://www.npmjs.com/package/9agent">npm</a> ·
+    <a href="https://github.com/nadimtuhin/9agent/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+</footer>
+
+</body>
+</html>
