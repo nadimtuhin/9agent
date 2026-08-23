@@ -34,9 +34,7 @@ yourself for any change under `src/runner/` or `docker/`.
 
 ## What a good change looks like
 
-- **Adapters** — see *Adding an adapter* in the [README](README.md#adding-an-adapter).
-  `supportsSandbox` defaults to refusing on purpose: silently running unsandboxed
-  when someone asked for `--sandbox` is the dangerous failure.
+- **Adapters** — see [Adding an adapter](#adding-an-adapter) below.
 - **Dockerfiles** — an image tag is a hash of its Dockerfile, so any edit rebuilds
   automatically. Keep agent versions pinned; a floating version means the cache key
   never changes while the contents silently do.
@@ -44,6 +42,25 @@ yourself for any change under `src/runner/` or `docker/`.
   next reader would otherwise undo. Not what the line does.
 - **Commits are [conventional](https://www.conventionalcommits.org/)** —
   `fix:`, `feat:`, `docs:`, `chore:`, with a body saying what broke and why.
+
+## Adding an adapter
+
+```typescript
+export const myAdapter: AgentAdapter = {
+  name: "my-agent",
+  aliases: ["ma"],
+  supportsSandbox: true,          // omit and --sandbox is refused, not ignored
+  async detect() { return /* boolean */; },
+  async launch(opts: LaunchOptions) { /* spawn it */ },
+};
+```
+
+Push it to `REGISTRY` in `src/index.ts`. `supportsSandbox` defaults to refusing on
+purpose: silently running unsandboxed when someone asked for `--sandbox` is the
+dangerous failure. Set `sandboxRefusal` to say why if it can't.
+
+To give it a sandbox, add a `SandboxSpec` in `src/runner/sandbox.ts` — which user
+to run as (or none), where `$HOME` is, which paths the host executes.
 
 ## Reporting a bug
 
