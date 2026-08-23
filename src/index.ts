@@ -5,6 +5,7 @@ import process from "node:process";
 import { createRequire } from "node:module";
 import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
 import { assertModelExists, parseYes, resolveKey } from "./opts.js";
+import { runUpdate } from "./update.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { piAdapter } from "./adapters/pi.js";
@@ -18,6 +19,22 @@ const program = new Command();
 // Read at runtime rather than importing JSON: resolves in both the src/ and
 // dist/ layouts, the same way dockerfilePath() does, with no assert syntax.
 const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
+
+// Declared before the default action: commander matches a subcommand name
+// ahead of the root command's `[args...]`, which would otherwise forward
+// `update` to the agent as a passthrough arg.
+program
+  .command("update")
+  .description("update 9agent to the latest published version")
+  .option("--dry-run", "print the npm command, run nothing")
+  .action(async (opts: { dryRun?: boolean }) => {
+    try {
+      console.log(await runUpdate({ dryRun: opts.dryRun }));
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
 
 program
   .name("9agent")
