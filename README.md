@@ -1,5 +1,10 @@
 # 9agent
 
+[![npm](https://img.shields.io/npm/v/9agent?color=blue)](https://www.npmjs.com/package/9agent)
+[![CI](https://img.shields.io/github/actions/workflow/status/nadimtuhin/9agent/ci.yml?branch=main)](https://github.com/nadimtuhin/9agent/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/node/v/9agent)](https://nodejs.org)
+
 One launcher for Claude Code, Pi, and Hermes — pick a model from your gateway,
 launch the agent, optionally in Docker.
 
@@ -173,4 +178,11 @@ npm run test:docker  # integration harness (needs Docker)
 npm run release      # gate, build, verify the tarball, publish
 ```
 
-[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · MIT
+## Contributing
+
+Issues and pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Release history is in the [changelog](CHANGELOG.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
