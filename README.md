@@ -8,6 +8,8 @@
 One launcher for Claude Code, Pi, and Hermes — pick a model from your gateway,
 launch the agent, optionally in Docker.
 
+![9agent picking an agent, a model, and a permission mode](docs/demo.gif)
+
 ```bash
 npm i -g 9agent
 9agent                      # prompts: agent → model → mode
