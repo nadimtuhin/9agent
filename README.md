@@ -38,7 +38,10 @@ No gateway? You get `Is 9Router running?` and exit 1 — never a hang.
 | `--print-only` | Print the resolved env + argv, spawn nothing | — |
 | `-V, --version` | Print version | — |
 
-`NINEROUTER_URL` and `NINEROUTER_KEY` set the last two.
+`NINEROUTER_URL` and `NINEROUTER_KEY` set the last two. `LOCAL_9ROUTER_KEY`
+is also read for the key, after `NINEROUTER_KEY` — a sandboxed agent reaches
+the gateway as a remote client, so the `sk_9router` placeholder is rejected
+and a real key is required.
 
 Anything after `--` goes to the agent verbatim:
 
@@ -99,6 +102,12 @@ runs as root inside itself where claude and pi run as `node`.
 | The rest of the agent home | Read-write, and it holds OAuth tokens and history |
 | The network | Full outbound, including host loopback |
 | The gateway key | Passed as an env var |
+
+Setting `NINEAGENT_SANDBOX_ROOT=1` builds a variant image with passwordless
+`sudo` (`docker/claude-root.Dockerfile`, claude only). It is a deliberate hole
+in everything above — use it only when an agent must install packages
+mid-session, and prefer adding them to the Dockerfile, since runtime installs
+are discarded on exit anyway.
 
 Read-only per agent — claude/pi: `settings.json`, `settings.local.json`,
 `CLAUDE.md`, `hooks/`, `plugins/`. Hermes: `agent-hooks/`, `hooks/`, `plugins/`,
