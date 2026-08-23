@@ -22,6 +22,7 @@ check "typecheck (src + tests)" npx tsc --noEmit
 # Must actually emit: with --noEmit this passed while dist/ was stale, which is
 # the exact trap the build config exists to close.
 check "build emits" npx tsc -p tsconfig.build.json
+check "lint" npx eslint .
 check "unit tests" npm test
 
 # Regression guard: excluding __test__ from tsconfig.json once silently left the

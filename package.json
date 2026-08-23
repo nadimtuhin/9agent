@@ -1,7 +1,7 @@
 {
   "name": "9agent",
   "version": "0.2.0",
-  "description": "Universal 9Router agent launcher — discover models, pick agent, launch.",
+  "description": "Universal 9Router agent launcher \u2014 discover models, pick agent, launch.",
   "license": "MIT",
   "author": "Omar Faruque Tuhin",
   "homepage": "https://github.com/nadimtuhin/9agent#readme",
@@ -34,6 +34,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "dev": "tsx src/index.ts",
     "test:docker": "bash test/run-docker-tests.sh",
     "test": "node --test --import tsx src/adapters/__test__/*.test.ts",
@@ -42,13 +44,16 @@
     "release": "bash scripts/release.sh"
   },
   "dependencies": {
-    "commander": "^13.0.0",
-    "@inquirer/prompts": "^7.0.0"
+    "@inquirer/prompts": "^7.0.0",
+    "commander": "^13.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.0.0",
-    "tsx": "^4.0.0"
+    "eslint": "^9.39.5",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.67.0"
   },
   "engines": {
     "node": ">=20"

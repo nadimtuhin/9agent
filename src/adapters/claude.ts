@@ -60,8 +60,8 @@ export const claudeAdapter: AgentAdapter = {
   async detect() {
     return new Promise((resolve) => {
       execFileAsync("which", ["claude"])
-        .then(() => resolve(true))
-        .catch(() => resolve(false));
+        .then(() => { resolve(true); })
+        .catch(() => { resolve(false); });
     });
   },
   async launch(opts: LaunchOptions) {
@@ -86,7 +86,7 @@ export const claudeAdapter: AgentAdapter = {
             args,
             env: redactSecrets(env),
             cwd: process.cwd(),
-            tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+            tty: process.stdin.isTTY && process.stdout.isTTY,
             gitconfig: gitconfigIfPresent(),
             readOnlyPaths: readOnlyPathsIn(spec.agentHome),
           }).join(" "),

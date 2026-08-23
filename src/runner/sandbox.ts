@@ -117,7 +117,7 @@ export function containerizeUrl(url: string): string {
   // Normalise before comparing: URL keeps IPv6 in brackets, and a trailing dot
   // ("localhost.") is a legal absolute form of the same name.
   const host = parsed.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
-  const isLoopback = LOOPBACK.has(host) || /^127\./.test(host);
+  const isLoopback = LOOPBACK.has(host) || host.startsWith("127.");
   if (!isLoopback) return url;
   parsed.hostname = HOST_ALIAS;
   return parsed.toString();
@@ -551,7 +551,7 @@ export async function runSandbox(
     args,
     env,
     cwd,
-    tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    tty: process.stdin.isTTY && process.stdout.isTTY,
     gitconfig: gitconfigIfPresent(),
     readOnlyPaths,
     // Symlink-derived mounts are guesses; the caller's are deliberate. When

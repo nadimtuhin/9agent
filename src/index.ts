@@ -91,7 +91,7 @@ async function main(opts: ProgramOpts) {
     const answer = await select({
       message: "Pick an agent:",
       choices: installed.map((a) => ({
-        name: `${a.name}`,
+        name: a.name,
         value: a,
         description: a.aliases?.length ? `aliases: ${a.aliases.join(", ")}` : undefined,
       })),
@@ -110,7 +110,7 @@ async function main(opts: ProgramOpts) {
     }
     const answer = await search<string>({
       message: "Pick a model:",
-      source: async (input, _choices) => {
+      source: (input) => {
         const filtered = models.filter(
           (m) =>
             m.id.includes(input ?? "") ||
@@ -144,7 +144,7 @@ async function main(opts: ProgramOpts) {
   }
 
   const launchOpts: LaunchOptions = {
-    model: model!,
+    model: model,
     baseUrl: options.gateway,
     apiKey: options.key,
     yolo,

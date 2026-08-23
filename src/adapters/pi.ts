@@ -51,8 +51,8 @@ export const piAdapter: AgentAdapter = {
   async detect() {
     return new Promise((resolve) => {
       execFileAsync("which", ["pi"])
-        .then(() => resolve(true))
-        .catch(() => resolve(false));
+        .then(() => { resolve(true); })
+        .catch(() => { resolve(false); });
     });
   },
   async launch(opts: LaunchOptions) {
