@@ -69,7 +69,10 @@ Sleep 1s
 Enter
 
 # Model catalog: land unfiltered, scroll, then narrow.
-Sleep 1s
+# RACE GUARD: the model picker mounts only after the agent picker's Enter, so
+# it is NOT warm from the first gateway hit. Arrow keys sent before Ink is
+# listening echo to the raw TTY as literal ^[[B. Do not go below 2s.
+Sleep 2.5s
 Down
 Down
 Down
