@@ -34,6 +34,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "deploy": "wrangler pages deploy site --project-name=9agent --branch=main",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "dev": "tsx src/index.ts",
