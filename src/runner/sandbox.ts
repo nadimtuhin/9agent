@@ -239,7 +239,12 @@ function dockerfilePath(name: string): string {
 export function claudeSpec(): SandboxSpec {
   return {
     repo: "9agent/claude",
-    dockerfile: dockerfilePath("claude.Dockerfile"),
+    // Opt-in escape hatch: the root variant adds passwordless sudo, which the
+    // default image deliberately lacks. Its tag differs because the tag is a
+    // hash of the Dockerfile, so the two images never collide.
+    dockerfile: dockerfilePath(
+      process.env.NINEAGENT_SANDBOX_ROOT ? "claude-root.Dockerfile" : "claude.Dockerfile",
+    ),
     agentHome: join(homedir(), ".claude"),
     containerHome: "/home/node/.claude",
     user: "node",
