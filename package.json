@@ -1,6 +1,6 @@
 {
   "name": "9agent",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Universal 9Router agent launcher — discover models, pick agent, launch.",
   "license": "MIT",
   "author": "Omar Faruque Tuhin",

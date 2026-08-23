@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 - 2026-08-24
+
+### Added
+
+- **`9agent update`** installs the latest published version (`npm install -g
+  9agent@latest`). `--dry-run` prints the command without running it. Typing
+  `9agent update` before this release silently forwarded `update` to the agent
+  as a passthrough argument, so it looked like a no-op.
+
+### Changed
+
+- **The model catalog is fetched while you pick an agent**, rather than after.
+  On a slow gateway the wait now hides inside the time you spend choosing. A
+  "Loading models…" hint appears only if the fetch is still in flight, so a fast
+  gateway shows nothing at all.
+
 ## 0.3.0 - 2026-08-23
 
 ### Fixed
