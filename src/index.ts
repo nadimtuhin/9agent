@@ -4,7 +4,7 @@ import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import { discoverModels } from "./discovery.js";
-import { parseYes, resolveKey } from "./opts.js";
+import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { piAdapter } from "./adapters/pi.js";
@@ -55,6 +55,36 @@ interface ProgramOpts {
   args: string[];
 }
 
+/** An explicit `--model` is validated against the same list the picker offers,
+ *  so a typo fails at launch instead of on the agent's first request. */
+async function resolveModel(
+  flag: string | undefined,
+  gateway: string,
+  key: string,
+): Promise<string> {
+  const models = await discoverModels(gateway, key);
+
+  if (flag) {
+    assertModelExists(
+      flag,
+      models.map((m) => m.id),
+    );
+    return flag;
+  }
+
+  if (!process.stdin.isTTY) {
+    throw new Error("No TTY — pass --model <id> to pick a model.");
+  }
+
+  return search<string>({
+    message: "Pick a model:",
+    source: (input) =>
+      models
+        .filter((m) => m.id.includes(input ?? "") || m.owned_by.includes(input ?? ""))
+        .map((m) => ({ name: `${m.id} — ${m.owned_by}`, value: m.id })),
+  });
+}
+
 async function main(opts: ProgramOpts) {
   const options: ProgramOpts & { key: string } = {
     agent: opts.agent,
@@ -102,28 +132,7 @@ async function main(opts: ProgramOpts) {
   if (options.sandbox) assertSandboxSupported(adapter);
 
   // 2. Pick model
-  const models = await discoverModels(options.gateway, options.key);
-  let model = options.model;
-  if (!model) {
-    if (!process.stdin.isTTY) {
-      throw new Error("No TTY — pass --model <id> to pick a model.");
-    }
-    const answer = await search<string>({
-      message: "Pick a model:",
-      source: (input) => {
-        const filtered = models.filter(
-          (m) =>
-            m.id.includes(input ?? "") ||
-            m.owned_by.includes(input ?? ""),
-        );
-        return filtered.map((m) => ({
-          name: `${m.id} — ${m.owned_by}`,
-          value: m.id,
-        }));
-      },
-    });
-    model = answer;
-  }
+  const model = await resolveModel(options.model, options.gateway, options.key);
 
   // 3. Pick mode
   if (options.yolo && options.yes === "safe") {
