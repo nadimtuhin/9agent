@@ -34,7 +34,7 @@ No gateway? You get `Is 9Router running?` and exit 1 — never a hang.
 | `--yolo` | Skip permission prompts | safe |
 | `--yes <mode>` | Non-interactive: `safe`\|`dangerous` | — |
 | `--gateway <url>` | Gateway base URL | `http://localhost:20128/v1` |
-| `--key <token>` | Gateway key. `sk_9router` is a local placeholder, not a credential | `sk_9router` |
+| `--key <token>` | Gateway key. `sk_9router` is a local placeholder, not a credential | `$NINEROUTER_KEY`, else `$LOCAL_9ROUTER_KEY`, else `sk_9router` |
 | `--print-only` | Print the resolved env + argv, spawn nothing | — |
 | `-V, --version` | Print version | — |
 

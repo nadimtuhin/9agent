@@ -4,7 +4,7 @@ import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import { discoverModels } from "./discovery.js";
-import { parseYes } from "./opts.js";
+import { parseYes, resolveKey } from "./opts.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { piAdapter } from "./adapters/pi.js";
@@ -27,7 +27,9 @@ program
   .option("-m, --model <id>", "model ID (skip picker)")
   .option("--yolo", "skip permissions / dangerous mode")
   .option("--gateway <url>", "9Router base URL", process.env.NINEROUTER_URL ?? "http://localhost:20128/v1")
-  .option("--key <token>", "9Router API key", process.env.NINEROUTER_KEY ?? process.env.LOCAL_9ROUTER_KEY ?? "sk_9router")
+  // No commander default: it would render the resolved value in --help, and
+  // that value is a live credential once NINEROUTER_KEY is set. Resolved below.
+  .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
   .option("--sandbox", "run the agent in a Docker container")
@@ -46,7 +48,7 @@ interface ProgramOpts {
   model?: string;
   yolo: boolean;
   gateway: string;
-  key: string;
+  key?: string;
   yes?: string;
   printOnly: boolean;
   sandbox: boolean;
@@ -54,12 +56,12 @@ interface ProgramOpts {
 }
 
 async function main(opts: ProgramOpts) {
-  const options: ProgramOpts = {
+  const options: ProgramOpts & { key: string } = {
     agent: opts.agent,
     model: opts.model,
     yolo: opts.yolo ?? false,
     gateway: opts.gateway,
-    key: opts.key,
+    key: resolveKey(opts.key),
     yes: opts.yes,
     printOnly: opts.printOnly ?? false,
     sandbox: opts.sandbox ?? false,
