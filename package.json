@@ -34,6 +34,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "predeploy": "bash scripts/stamp-version.sh",
     "deploy": "wrangler pages deploy site --project-name=9agent --branch=main",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
