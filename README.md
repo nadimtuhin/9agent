@@ -16,8 +16,8 @@ npm i -g 9agent
 ```
 
 ```bash
-9agent -a claude -m lc/LongCat-2.0 --yolo            # skip the prompts
-9agent -a claude -m lc/LongCat-2.0 --yes safe --sandbox   # ...and run it in Docker
+9agent -a claude -m ag/gemini-3.7-flash-high --yolo            # skip the prompts
+9agent -a claude -m ag/gemini-3.7-flash-high --yes safe --sandbox   # ...and in Docker
 ```
 
 ## Requirements
@@ -41,19 +41,20 @@ No gateway? You get `Is 9Router running?` and exit 1 — never a hang.
 | `--yolo` | Skip permission prompts | safe |
 | `--yes <mode>` | Non-interactive: `safe`\|`dangerous` | — |
 | `--gateway <url>` | Gateway base URL | `http://localhost:20128/v1` |
-| `--key <token>` | Gateway key. `sk_9router` is a local placeholder, not a credential | `$NINEROUTER_KEY`, else `$LOCAL_9ROUTER_KEY`, else `sk_9router` |
+| `--key <token>` | Gateway key. `sk_9router` is a local placeholder, not a credential | see below |
 | `--print-only` | Print the resolved env + argv, spawn nothing | — |
 | `-V, --version` | Print version | — |
 
-`NINEROUTER_URL` and `NINEROUTER_KEY` set the last two. `LOCAL_9ROUTER_KEY`
-is also read for the key, after `NINEROUTER_KEY` — a sandboxed agent reaches
-the gateway as a remote client, so the `sk_9router` placeholder is rejected
-and a real key is required.
+The gateway URL comes from `--gateway`, else `NINEROUTER_URL`. The key comes
+from `--key`, else `NINEROUTER_KEY`, else `LOCAL_9ROUTER_KEY`, else the
+`sk_9router` placeholder. `LOCAL_9ROUTER_KEY` exists because a sandboxed agent
+reaches the gateway as a remote client, where the placeholder is rejected and a
+real key is required.
 
 Anything after `--` goes to the agent verbatim:
 
 ```bash
-9agent -a claude -m lc/LongCat-2.0 --yes safe -- --verbose
+9agent -a claude -m ag/gemini-3.7-flash-high --yes safe -- --verbose
 ```
 
 ## Agents
