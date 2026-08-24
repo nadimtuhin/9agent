@@ -34,20 +34,49 @@ program
   // whichever command's option set captured the flag.
   .option("--gateway <url>", "9Router base URL")
   .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
-  .action(async (opts: { gateway?: string; key?: string }) => {
+  .option("--json", "machine-readable output for CI")
+  .action(async (opts: { gateway?: string; key?: string; json?: boolean }) => {
     const root = program.opts<{ gateway?: string; key?: string }>();
     const gateway =
       opts.gateway ?? root.gateway ?? process.env.NINEROUTER_URL ?? "http://localhost:20128/v1";
     const keyFlag = opts.key ?? root.key;
-    const { report, exitCode } = await runDoctor(
+    const { checks, report, exitCode } = await runDoctor(
       defaultDoctorDeps({
         gateway,
         key: resolveKey(keyFlag),
         keyFlag,
       }),
     );
-    process.stdout.write(report);
+    // The exit code says only "something failed". CI needs to know WHICH check,
+    // and parsing the aligned ✔/✘ report would be scraping a human layout.
+    // `checks` already carries no key value, so this leaks nothing the report doesn't.
+    process.stdout.write(
+      opts.json ? JSON.stringify({ ok: exitCode === 0, checks }, null, 2) + "\n" : report,
+    );
     process.exit(exitCode);
+  });
+
+program
+  .command("models")
+  .description("list the models the gateway serves")
+  .option("--gateway <url>", "9Router base URL")
+  .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
+  .option("--json", "machine-readable output")
+  .action(async (opts: { gateway?: string; key?: string; json?: boolean }) => {
+    const root = program.opts<{ gateway?: string; key?: string }>();
+    const gateway =
+      opts.gateway ?? root.gateway ?? process.env.NINEROUTER_URL ?? "http://localhost:20128/v1";
+    try {
+      const models = await discoverModels(gateway, resolveKey(opts.key ?? root.key));
+      process.stdout.write(
+        opts.json
+          ? JSON.stringify(models, null, 2) + "\n"
+          : models.map((m) => `${m.id}\t${m.owned_by}`).join("\n") + "\n",
+      );
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
   });
 
 program
@@ -75,6 +104,11 @@ program
   // that value is a live credential once NINEROUTER_KEY is set. Resolved below.
   .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
+  // Deliberately NOT aliased to --dry-run. A root-level --dry-run resolves
+  // against the parent, so `9agent update --dry-run` never reaches update's own
+  // option: opts.dryRun arrives undefined and runUpdate takes the LIVE path,
+  // running a real `npm install -g`. The naming split with `update --dry-run`
+  // is a papercut; disarming a subcommand's dry-run guard is a footgun.
   .option("--print-only", "print resolved env+args, don't spawn")
   .option("--sandbox", "run the agent in a Docker container")
   .argument("[args...]", "extra args passed through to the agent")

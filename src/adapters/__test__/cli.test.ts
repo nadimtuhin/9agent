@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseYes } from "../../opts.js";
 
@@ -25,12 +28,33 @@ function run(...args: string[]) {
   });
 }
 
+/** Same as run(), but with a throwaway HOME so ~/.config/9agent/models.json
+ *  cannot answer for the gateway. Without this, a warm cache on the dev box
+ *  turns "gateway unreachable" into a cache hit and the test result depends on
+ *  whether 9agent happened to run recently. Mirrors release.sh's FAKE_HOME. */
+function runIsolated(...args: string[]) {
+  const home = mkdtempSync(join(tmpdir(), "9agent-test-"));
+  try {
+    return spawnSync(process.execPath, ["--import", "tsx", CLI, ...args], {
+      encoding: "utf-8",
+      timeout: 10_000,
+      // npm_config_prefix as well as HOME: `update` runs a real
+      // `npm install -g` on its live path, and a flag regression that leaves
+      // dryRun undefined would otherwise overwrite the developer's global
+      // 9agent binary from the test suite. It already happened once.
+      env: { ...process.env, HOME: home, npm_config_prefix: home },
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
 describe("update subcommand routing", () => {
   // Regression: `.argument("[args...]")` on the root command swallowed `update`
   // and forwarded it to the agent as a passthrough arg. Commander only matches
   // the subcommand first because it is registered ahead of the root action.
   it("runs update instead of forwarding it to an agent", () => {
-    const r = run("update", "--dry-run");
+    const r = runIsolated("update", "--dry-run");
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /npm install -g 9agent@latest/);
     // The agent path would have hit the picker or a gateway error instead.
@@ -81,5 +105,38 @@ describe("doctor subcommand routing", () => {
     const r = run("--help");
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /^\s*doctor\s/m);
+  });
+});
+
+describe("doctor --json", () => {
+  const DEAD = "http://127.0.0.1:1/v1";
+
+  it("emits one parseable object, and no human report", () => {
+    const r = run("doctor", "--gateway", DEAD, "--json");
+    const parsed = JSON.parse(r.stdout) as { ok: boolean; checks: { name: string }[] };
+    assert.equal(parsed.ok, false);
+    assert.deepEqual(
+      parsed.checks.map((c) => c.name),
+      ["gateway", "key", "agents", "docker"],
+    );
+    assert.doesNotMatch(r.stdout, /✔|✘/);
+  });
+
+  it("withholds the key value in JSON too", () => {
+    const r = run("doctor", "--gateway", DEAD, "--json", "--key", "sk-must-not-appear");
+    assert.doesNotMatch(r.stdout + r.stderr, /sk-must-not-appear/);
+  });
+});
+
+describe("models subcommand", () => {
+  it("fails legibly when the gateway is unreachable", () => {
+    const r = runIsolated("models", "--gateway", "http://127.0.0.1:1/v1");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /Is 9Router running\?/);
+  });
+
+  it("lists models in --help", () => {
+    const r = run("--help");
+    assert.match(r.stdout, /^\s*models\s/m);
   });
 });
