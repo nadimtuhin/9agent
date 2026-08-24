@@ -7,12 +7,15 @@ import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { runUpdate } from "./update.js";
 import { runDoctor, defaultDoctorDeps } from "./doctor.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
+import { aiderAdapter } from "./adapters/aider.js";
 import { claudeAdapter } from "./adapters/claude.js";
-import { piAdapter } from "./adapters/pi.js";
+import { clineAdapter } from "./adapters/cline.js";
+import { codexAdapter } from "./adapters/codex.js";
 import { hermesAdapter } from "./adapters/hermes.js";
+import { piAdapter } from "./adapters/pi.js";
 import type { LaunchOptions } from "./adapters/base.js";
 
-REGISTRY.push(claudeAdapter, piAdapter, hermesAdapter);
+REGISTRY.push(aiderAdapter, claudeAdapter, clineAdapter, codexAdapter, hermesAdapter, piAdapter);
 
 const program = new Command();
 
