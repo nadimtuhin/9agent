@@ -11,7 +11,9 @@ check() {
     echo "  ok    $name"
   else
     echo "  FAIL  $name"
-    sed 's/^/        /' /tmp/9agent-check.log | tail -20
+    # Show failing lines first (TAP "not ok" + assertion details), then the summary.
+    grep -E 'not ok|✖|ERR_TEST|AssertionError|expected:|actual:|operator:|Error:' /tmp/9agent-check.log | sed 's/^/        /' | head -30
+    sed 's/^/        /' /tmp/9agent-check.log | tail -25
     fails=$((fails + 1))
   fi
 }
