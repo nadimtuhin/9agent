@@ -1,0 +1,26 @@
+name: Docker
+
+# Drives a real Docker daemon through docker-compose.test.yml, so it is minutes
+# rather than seconds -- kept out of the main gate and triggered by path
+# instead. Image tags are hashes of the Dockerfiles (src/runner/sandbox.ts),
+# so edits under docker/ or src/runner/ are exactly the ones that can silently
+# break the sandbox; this workflow keeps those edits honest.
+on:
+  push:
+    branches: [main]
+    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json']
+  pull_request:
+    branches: [main]
+    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json']
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:docker

@@ -23,19 +23,6 @@ jobs:
       - run: npm ci
       - run: npm run check
 
-  # Separate job: this one drives a real Docker daemon through
-  # docker-compose.test.yml, so it is minutes rather than seconds.
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
-      - run: npm run test:docker
-
   # The tarball is what users actually install, and `files` governs it -- a
   # missing entry only shows up here, never in the unit tests.
   package:

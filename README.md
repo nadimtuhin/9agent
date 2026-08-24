@@ -79,7 +79,9 @@ customizations. Safe mode is simply omitting `--yolo`.
 
 Runs the agent in Docker — a blast-radius limiter, not a security boundary
 against a hostile agent. Only cwd and the agent home are mounted, and anything
-your host executes (hooks, plugins, settings) is mounted read-only.
+your host executes (hooks, plugins, settings) is mounted read-only. The
+container keeps full network egress — reaching the gateway requires it — so it
+bounds filesystem blast radius, not exfiltration.
 
 [docs/sandbox.md](docs/sandbox.md) has the full threat model, the per-agent
 details, and the known limits.
