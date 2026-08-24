@@ -19,8 +19,6 @@ export function buildHermesArgs(opts: {
   yolo: boolean;
   extraArgs: string[];
 }): string[] {
-  // --safe-mode is NOT the inverse of --yolo (it disables customizations);
-  // safe mode is simply the absence of --yolo.
   return [
     "chat",
     "-m",
@@ -35,8 +33,6 @@ export function buildHermesArgs(opts: {
 export const hermesAdapter: AgentAdapter = {
   name: "hermes",
   aliases: ["h"],
-  // Sandboxed by building upstream's own image from the local checkout — they
-  // block pip/wheel installs, so a Dockerfile of ours could never work.
   supportsSandbox: true,
   async detect() {
     try {
@@ -58,8 +54,6 @@ export const hermesAdapter: AgentAdapter = {
             `build the image. Clone it there, or run without --sandbox.`,
         );
       }
-      // Hermes routes via config.yaml, so the container needs a copy whose
-      // provider URLs point at the host. The user's own file is only ever read.
       const source = join(spec.agentHome, "config.yaml");
       if (!existsSync(source)) {
         throw new Error(
@@ -81,9 +75,6 @@ export const hermesAdapter: AgentAdapter = {
       return;
     }
 
-    // Warn before the dry-run guard: --print-only is how users inspect a launch,
-    // so it must show every warning the real launch would print.
-    // The user owns config.yaml — warn on mismatch, never rewrite it.
     const expected = "http://localhost:20128/v1";
     if (opts.baseUrl !== expected) {
       console.error(
@@ -98,8 +89,6 @@ export const hermesAdapter: AgentAdapter = {
       return;
     }
 
-    // no api-key warning. --provider 9router means hermes reads its key
-    // from its own config, and the empty env below never carries opts.apiKey.
     await runHost("hermes", args, {});
   },
 };

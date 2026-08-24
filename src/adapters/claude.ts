@@ -14,7 +14,6 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** --print-only output gets pasted into bug reports, so keep the token out of it. */
 export function redactSecrets(env: Record<string, string>): Record<string, string> {
   const safe = { ...env };
   if (safe.ANTHROPIC_AUTH_TOKEN) {
@@ -66,7 +65,6 @@ export const claudeAdapter: AgentAdapter = {
   },
   async launch(opts: LaunchOptions) {
     const args = buildClaudeArgs(opts);
-    // In a container the gateway is not on localhost any more — it is on the host.
     const env = buildClaudeEnv(
       opts.sandbox ? { ...opts, baseUrl: containerizeUrl(opts.baseUrl) } : opts,
     );

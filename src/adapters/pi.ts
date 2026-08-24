@@ -8,17 +8,6 @@ import { piSpec, resolveImage, runSandbox, writeShadowConfig } from "../runner/s
 
 const execFileAsync = promisify(execFile);
 
-/**
- * Whether pi's own config knows this model id.
- *
- * 9agent offers every model the Gateway serves; pi only knows what is listed in
- * models.json, and silently falls back to default context limits for anything
- * else. Routing still works — the id passes through to 9Router — but pi is
- * guessing at contextWindow, maxTokens, and image support.
- *
- * Read-only by design: warn, never rewrite the user's file (ADR-0001).
- * `undefined` means "cannot tell", which must not produce a warning.
- */
 export function piKnowsModel(configText: string, model: string): boolean | undefined {
   let ids: string[];
   try {
@@ -29,7 +18,7 @@ export function piKnowsModel(configText: string, model: string): boolean | undef
       (p.models ?? []).map((m) => m.id ?? ""),
     );
   } catch {
-    return undefined; // malformed config is pi's problem to report, not ours
+    return undefined;
   }
   if (ids.length === 0) return undefined;
   return ids.includes(model);
@@ -40,7 +29,6 @@ export function buildPiArgs(opts: {
   yolo: boolean;
   extraArgs: string[];
 }): string[] {
-  // yolo is a confirmed no-op: Pi has no built-in permission system
   return ["--provider", "9router", "--model", opts.model, ...opts.extraArgs];
 }
 
@@ -58,8 +46,6 @@ export const piAdapter: AgentAdapter = {
   async launch(opts: LaunchOptions) {
     const args = buildPiArgs(opts);
 
-    // Warn before the dry-run guard: --print-only must show every warning a
-    // real launch would print.
     const modelsJson = join(piSpec().agentHome, "agent", "models.json");
     if (existsSync(modelsJson)) {
       const known = piKnowsModel(readFileSync(modelsJson, "utf-8"), opts.model);
@@ -72,8 +58,6 @@ export const piAdapter: AgentAdapter = {
     }
 
     if (opts.sandbox) {
-      // Pi routes via models.json, so the container needs a copy whose gateway
-      // points at the host. The user's own file is only ever read.
       const spec = piSpec();
       const source = join(spec.agentHome, "agent", "models.json");
       if (!existsSync(source)) {
@@ -105,8 +89,6 @@ export const piAdapter: AgentAdapter = {
       return;
     }
 
-    // Pi env only carries provider API keys, not base URL.
-    // Custom gateway needs models.json seeding (v2).
     const expected = "http://localhost:20128/v1";
     if (opts.baseUrl !== expected) {
       console.error(

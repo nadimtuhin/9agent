@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 
-/** Injected so tests never touch the global npm prefix. */
 export type Exec = (
   cmd: string,
   args: string[],
@@ -10,8 +9,6 @@ const ARGS = ["install", "-g", "9agent@latest"];
 
 const spawnExec: Exec = (cmd, args) =>
   new Promise((resolve) => {
-    // stderr is piped, not inherited: a non-zero exit must carry npm's own
-    // message into the thrown Error, where the user will actually read it.
     const child = spawn(cmd, args, { stdio: ["ignore", "inherit", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (c: Buffer) => (stderr += c.toString()));

@@ -37,23 +37,13 @@ function writeCache(path: string, models: ModelEntry[]): void {
   try {
     mkdirSync(join(path, ".."), { recursive: true });
     writeFileSync(path, JSON.stringify(models, null, 2), "utf-8");
-  } catch {
-    // Best-effort — never block launch on cache write
-  }
+  } catch (_e: unknown) { void _e; }
 }
 
-/** Where the "still loading" hint is drawn. Injected rather than reaching for
- *  process.stderr so a test can assert that nothing was written. */
 export interface HintTarget {
   write: (s: string) => boolean;
 }
 
-/**
- * Await a gateway fetch that was started earlier — before the agent picker, so
- * its latency hides inside the time the user spends choosing. Draws a hint only
- * if the fetch is still in flight by the next event-loop turn, so a fast gateway
- * (or a warm one) produces no flicker at all.
- */
 export async function awaitModels(
   pending: Promise<ModelEntry[]>,
   opts: { stream: HintTarget; isTTY: boolean },
@@ -77,8 +67,6 @@ export async function awaitModels(
   try {
     return await pending;
   } finally {
-    // \r\x1b[K — column 0, clear to end of line, so the hint does not linger
-    // above the picker (or above the error, if the fetch rejected).
     opts.stream.write("\r\x1b[K");
   }
 }
@@ -88,8 +76,6 @@ export async function discoverModels(
   apiKey: string,
   cachePath: string = CACHE_PATH,
 ): Promise<ModelEntry[]> {
-  // only a transport failure means "offline". An HTTP status (401, 500)
-  // or a bad payload is a real error and must surface, not be masked by cache.
   let res: Response;
   try {
     res = await fetch(`${baseUrl}/models`, {
@@ -97,8 +83,6 @@ export async function discoverModels(
     });
   } catch {
     const cached = readCache(cachePath);
-    // An empty cache is not a usable answer — it would open an empty picker
-    // instead of telling the user the gateway is unreachable.
     if (cached && cached.length > 0) {
       console.error(
         `9agent: cannot reach ${baseUrl}/models — serving ${cached.length} models from cache at ${cachePath}. It may be stale.`,

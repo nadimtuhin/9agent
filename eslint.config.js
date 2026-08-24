@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
+import noComments from "eslint-plugin-no-comments";
 
 // Guardrails against agent-written sprawl. An LLM will happily produce a
 // 200-line function with six levels of nesting that typechecks fine; these
@@ -7,27 +8,45 @@ import tseslint from "typescript-eslint";
 const AGENT_SPRAWL_LIMITS = {
   complexity: ["error", 10],
   "max-depth": ["error", 3],
-  "max-params": ["error", 4],
+  "max-params": ["error", 3],
   "max-nested-callbacks": ["error", 3],
   "max-statements": ["error", 20],
-  "max-lines": ["error", { max: 300, skipBlankLines: true, skipComments: true }],
+  "max-lines": ["error", { max: 250, skipBlankLines: true, skipComments: true }],
   "max-lines-per-function": [
     "error",
     { max: 50, skipBlankLines: true, skipComments: true },
   ],
+  // One class per file — AI will dump everything into one module otherwise.
+  "max-classes-per-file": ["error", 1],
+  // TODO/FIXME are where half-finished AI logic hides. Finish it or cut it.
+  "no-warning-comments": [
+    "error",
+    { terms: ["TODO", "FIXME", "HACK", "XXX"], location: "anywhere" },
+  ],
+  // `as Type` on unknown API data is type guarding — the right pattern here.
+  // Banning it forces worse workarounds. strictTypeChecked already catches
+  // the dangerous casts. Slap an `as` on a typed value to bypass a real error
+  // and the type-aware rules will still flag it.
+  // no-magic-numbers deliberately omitted: flags 0o777, port numbers, UID/GID.
+  // Those are domain-idiomatic, not slop. Named constants would add noise.
+  // id-length deliberately omitted: flags `.map(m => ...)`, `catch (e)`, loop
+  // index `i`. These are universal shorthand, not unclear names.
+  // ponytail: these two rules if the codebase grows beyond CLI tool scale.
 };
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/", "docs/", "backlog/", "**/*.cjs", "**/*.mjs"] },
+  { ignores: ["dist/", "node_modules/", "docs/", "backlog/", "bin/", "**/*.cjs", "**/*.mjs", "eslint.config.js"] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
   {
+    plugins: { "no-comments": noComments },
     languageOptions: {
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
     rules: {
       ...AGENT_SPRAWL_LIMITS,
+      "no-comments/disallowComments": ["error", { allow: ["eslint", "global"] }],
       eqeqeq: ["error", "always"],
       // commander types every option as present, so `opts.yolo ?? false` reads as
       // a redundant check when it is the only thing standing between us and
@@ -58,6 +77,7 @@ export default tseslint.config(
       // A stub adapter and a hand-rolled promise are test scaffolding.
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/prefer-promise-reject-errors": "off",
+      "no-comments/disallowComments": "off",
     },
   },
   {

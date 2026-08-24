@@ -10,7 +10,6 @@ export interface Check {
   detail: string;
 }
 
-/** Injected so no check touches the network, the PATH, or a container daemon. */
 export type DoctorExec = (
   cmd: string,
   args: string[],
@@ -18,10 +17,7 @@ export type DoctorExec = (
 
 export interface DoctorDeps {
   gateway: string;
-  /** WHICH source won, by name. Never the value — see `key` below. */
   keySource: string;
-  /** Only ever compared against the placeholder; never rendered. A key is a
-   *  live credential, and v0.2.1 was a security release because --help leaked one. */
   key?: string;
   adapters: AgentAdapter[];
   fetchFn: typeof fetch;
@@ -46,8 +42,6 @@ const execExec: DoctorExec = (cmd, args) =>
     });
   });
 
-/** Mirrors resolveKey()'s precedence, but yields the source name instead of
- *  the secret — the whole point of the key check. */
 export function resolveKeySource(flag?: string): string {
   if (flag) return "--key";
   if (process.env.NINEROUTER_KEY) return "NINEROUTER_KEY";
@@ -82,8 +76,6 @@ async function checkGateway(deps: DoctorDeps): Promise<Check> {
 }
 
 function checkKey(deps: DoctorDeps): Check {
-  // sk_9router is a local placeholder, accepted only from loopback — usable
-  // here, but not for --sandbox, where the agent arrives as a remote client.
   if (deps.key === "sk_9router") {
     return {
       name: "key",
@@ -135,7 +127,6 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   return { checks, report, exitCode: checks.some((c) => c.status === "fail") ? 1 : 0 };
 }
 
-/** Real-world wiring. Kept apart from runDoctor so the logic stays injectable. */
 export function defaultDoctorDeps(opts: { gateway: string; key: string; keyFlag?: string }): DoctorDeps {
   return {
     gateway: opts.gateway,
