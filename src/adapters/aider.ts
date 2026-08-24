@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
+import { aiderSpec, containerizeUrl, resolveImage, runSandbox } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,9 +22,7 @@ export function buildAiderArgs(opts: {
 export const aiderAdapter: AgentAdapter = {
   name: "aider",
   aliases: ["a"],
-  supportsSandbox: false,
-  sandboxRefusal:
-    "aider: --sandbox is not supported — aider is an external CLI. Run it on the host.",
+  supportsSandbox: true,
   async detect() {
     try {
       await execFileAsync("which", ["aider"]);
@@ -34,6 +33,24 @@ export const aiderAdapter: AgentAdapter = {
   },
   async launch(opts: LaunchOptions) {
     const args = buildAiderArgs(opts);
+
+    if (opts.sandbox) {
+      const spec = aiderSpec();
+      const env = {
+        OPENAI_API_BASE: containerizeUrl(opts.baseUrl),
+        OPENAI_API_KEY: opts.apiKey,
+      };
+      if (opts.dryRun) {
+        console.error("--- aider sandbox dry run ---");
+        console.error("image:", resolveImage(spec));
+        console.error("env: OPENAI_API_BASE=" + env.OPENAI_API_BASE);
+        console.error("env: OPENAI_API_KEY=<redacted>");
+        return;
+      }
+      console.error(`aider: launching sandboxed with model=${opts.model}`);
+      await runSandbox(spec, "aider", args, env);
+      return;
+    }
 
     if (opts.dryRun) {
       console.error("--- aider dry run ---");

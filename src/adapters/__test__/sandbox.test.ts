@@ -18,6 +18,8 @@ import {
   isSensitivePath,
   hermesCheckout,
   hermesSpec,
+  aiderSpec,
+  opencodeSpec,
   containerizeConfigText,
   piSpec,
   buildSandboxArgs,
@@ -134,13 +136,19 @@ describe("containerizeConfigText", () => {
 describe("every agent spec", () => {
   it("points at a Dockerfile that exists", () => {
     // Sandbox is for every agent, so every spec must ship its image recipe.
-    for (const spec of [claudeSpec(), piSpec()]) {
+    for (const spec of [claudeSpec(), piSpec(), aiderSpec(), opencodeSpec()]) {
       assert.ok(existsSync(spec.dockerfile), spec.dockerfile);
     }
   });
   it("gives each agent its own image repo", () => {
-    const repos = [claudeSpec(), piSpec(), hermesSpec()].map((s) => s.repo);
-    assert.equal(new Set(repos).size, 3);
+    const repos = [
+      claudeSpec(),
+      piSpec(),
+      hermesSpec(),
+      aiderSpec(),
+      opencodeSpec(),
+    ].map((s) => s.repo);
+    assert.equal(new Set(repos).size, 5);
   });
 });
 
@@ -371,6 +379,22 @@ describe("buildSandboxArgs", () => {
   it("puts the image before the command", () => {
     const argv = buildSandboxArgs(base);
     assert.ok(argv.indexOf("9agent/claude:abc123") < argv.indexOf("claude"));
+  });
+
+  it("caps runaway agents: memory (no swap), cpus, and pids", () => {
+    // A blast-radius limiter that lets one agent eat every host byte or
+    // fork-bomb is decorative. --memory-swap == --memory means zero swap, so a
+    // thrashing container hits the OOM killer instead of stalling the laptop.
+    const argv = buildSandboxArgs(base);
+    const valueAfter = (flag: string) => {
+      const i = argv.indexOf(flag);
+      assert.notEqual(i, -1, `${flag} missing`);
+      return argv[i + 1];
+    };
+    assert.equal(valueAfter("--memory"), "4g");
+    assert.equal(valueAfter("--memory-swap"), "4g");
+    assert.equal(valueAfter("--cpus"), "2");
+    assert.equal(valueAfter("--pids-limit"), "256");
   });
 });
 

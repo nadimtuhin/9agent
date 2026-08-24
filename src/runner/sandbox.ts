@@ -115,6 +115,14 @@ export function buildSandboxArgs(opts: {
     "run",
     "--rm",
     "--init",
+    "--memory",
+    "4g",
+    "--memory-swap",
+    "4g",
+    "--cpus",
+    "2",
+    "--pids-limit",
+    "256",
     ...(tty ? ["-it"] : ["-i"]),
     ...(spec.user ? ["--user", spec.user] : []),
     "--add-host",
@@ -165,6 +173,28 @@ export function piSpec(): SandboxSpec {
     user: "node",
     gitconfigTarget: "/home/node/.gitconfig",
     hostExecutedPaths: HOST_EXECUTED_PATHS,
+  };
+}
+
+export function aiderSpec(): SandboxSpec {
+  return {
+    repo: "9agent/aider",
+    dockerfile: dockerfilePath("aider.Dockerfile"),
+    agentHome: join(homedir(), ".aider"),
+    containerHome: "/home/agent/.aider",
+    user: "agent",
+    gitconfigTarget: "/home/agent/.gitconfig",
+  };
+}
+
+export function opencodeSpec(): SandboxSpec {
+  return {
+    repo: "9agent/opencode",
+    dockerfile: dockerfilePath("opencode.Dockerfile"),
+    agentHome: join(homedir(), ".local", "share", "opencode"),
+    containerHome: "/home/node/.local/share/opencode",
+    user: "node",
+    gitconfigTarget: "/home/node/.gitconfig",
   };
 }
 
@@ -372,6 +402,7 @@ export async function runSandbox(
 ): Promise<void> {
   const cwd = process.cwd();
   assertMountableCwd(cwd);
+  mkdirSync(spec.agentHome, { recursive: true });
   const image = resolveImage(spec);
   await ensureImage(spec, image);
   const readOnlyPaths = readOnlyPathsIn(spec.agentHome, spec.hostExecutedPaths);

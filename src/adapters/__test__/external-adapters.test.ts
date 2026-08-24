@@ -10,7 +10,7 @@ import { buildClineArgs } from "../cline.js";
 import { buildCodexArgs } from "../codex.js";
 import { buildJcodeArgs } from "../jcode.js";
 import { buildKilocodeArgs } from "../kilocode.js";
-import { buildOpenCodeArgs } from "../opencode.js";
+import { buildOpenCodeArgs, buildOpenCodeConfig } from "../opencode.js";
 
 const CLI = fileURLToPath(new URL("../../index.ts", import.meta.url));
 
@@ -34,6 +34,7 @@ interface ExternalAdapterCase {
   yoloFlag: string[];
   baseUrlEnv: string;
   apiKeyEnv: string;
+  sandbox: boolean;
 }
 
 const CASES: ExternalAdapterCase[] = [
@@ -44,6 +45,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--yes-always"],
     baseUrlEnv: "OPENAI_API_BASE",
     apiKeyEnv: "OPENAI_API_KEY",
+    sandbox: true,
   },
   {
     name: "codex",
@@ -52,6 +54,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--full-auto"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
+    sandbox: false,
   },
   {
     name: "cline",
@@ -60,6 +63,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--auto-approve"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
+    sandbox: false,
   },
   {
     name: "jcode",
@@ -68,6 +72,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--dangerously-skip-permissions"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
+    sandbox: false,
   },
   {
     name: "kilocode",
@@ -76,6 +81,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--dangerously-skip-permissions"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
+    sandbox: false,
   },
   {
     name: "opencode",
@@ -84,6 +90,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--dangerously-skip-permissions"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
+    sandbox: true,
   },
 ];
 
@@ -92,7 +99,10 @@ describe("external adapter arg builders", () => {
     describe(c.name, () => {
       it("passes --model as a positional flag", () => {
         const args = c.buildArgs({ model: "claude-sonnet-5", yolo: false, extraArgs: [] });
-        const needle = c.name === "aider" ? "openai/claude-sonnet-5" : "claude-sonnet-5";
+        const needle =
+          c.name === "aider" ? "openai/claude-sonnet-5"
+          : c.name === "opencode" ? "9router/claude-sonnet-5"
+          : "claude-sonnet-5";
         assert.ok(args.includes(needle));
       });
 
@@ -126,6 +136,34 @@ describe("external adapter arg builders", () => {
     const args = buildAiderArgs({ model: "claude-sonnet-5", yolo: false, extraArgs: [] });
     assert.ok(args.includes("openai/claude-sonnet-5"));
   });
+
+  it("opencode prefixes model with its provider id", () => {
+    const args = buildOpenCodeArgs({ model: "gemini-3.7-flash", yolo: false, extraArgs: [] });
+    assert.ok(args.includes("9router/gemini-3.7-flash"));
+  });
+
+  it("buildOpenCodeConfig declares the gateway as a provider at the URL given", () => {
+    // opencode ignores OPENAI_BASE_URL entirely (proven by wire capture: zero
+    // bytes sent); providers come only from this config file. The caller picks
+    // the URL: containerized for sandbox runs, raw for host runs.
+    const cfg = JSON.parse(
+      buildOpenCodeConfig({
+        baseURL: "http://host.docker.internal:20128/v1",
+        apiKey: "sk_test_123",
+        model: "gemini-3.7-flash",
+      }),
+    ) as {
+      provider: Record<string, {
+        options: { baseURL: string; apiKey: string };
+        models: Record<string, unknown>;
+      }>;
+    };
+    const p = cfg.provider["9router"];
+    assert.equal(p.options.baseURL, "http://host.docker.internal:20128/v1");
+    assert.equal(p.options.apiKey, "sk_test_123");
+    // An undeclared model fails lookup locally before any byte hits the wire.
+    assert.ok("gemini-3.7-flash" in p.models);
+  });
 });
 
 describe("external adapter CLI routing", () => {
@@ -133,11 +171,23 @@ describe("external adapter CLI routing", () => {
 
   for (const c of CASES) {
     describe(c.name, () => {
-      it("refuses --sandbox with a clear message", () => {
-        const r = runIsolated("-a", c.name, "--sandbox", "--gateway", DEAD);
-        assert.equal(r.status, 1);
-        assert.match(r.stderr, /--sandbox is not supported/);
-      });
+      if (!c.sandbox) {
+        it("refuses --sandbox with a clear message", () => {
+          const r = runIsolated("-a", c.name, "--sandbox", "--gateway", DEAD);
+          assert.equal(r.status, 1);
+          assert.match(r.stderr, /--sandbox is not supported/);
+        });
+      } else {
+        it("routes --sandbox through its image with a containerized gateway URL", () => {
+          // Loopback must become host.docker.internal or the agent inside the
+          // container dials itself and loops on connection-refused.
+          const r = runIsolated("-a", c.name, "--sandbox", "--print-only", "--model", "claude-sonnet-5", "--gateway", DEAD);
+          assert.equal(r.status, 0, r.stderr);
+          const out = r.stdout + r.stderr;
+          assert.match(out, /9agent\/(aider|opencode):[0-9a-f]{12}/);
+          assert.match(out, /host\.docker\.internal/);
+        });
+      }
 
       it("--print-only prints args and exits 0", () => {
         const r = runIsolated("-a", c.name, "--print-only", "--model", "claude-sonnet-5", "--gateway", DEAD);
