@@ -203,6 +203,28 @@ export function opencodeSpec(): SandboxSpec {
   };
 }
 
+export function clineSpec(): SandboxSpec {
+  return {
+    repo: "9agent/cline",
+    dockerfile: dockerfilePath("cline.Dockerfile"),
+    agentHome: join(homedir(), ".cline"),
+    containerHome: "/home/node/.cline",
+    user: "node",
+    gitconfigTarget: "/home/node/.gitconfig",
+  };
+}
+
+export function kilocodeSpec(): SandboxSpec {
+  return {
+    repo: "9agent/kilocode",
+    dockerfile: dockerfilePath("kilocode.Dockerfile"),
+    agentHome: join(homedir(), ".kilocode"),
+    containerHome: "/home/node/.kilocode",
+    user: "node",
+    gitconfigTarget: "/home/node/.gitconfig",
+  };
+}
+
 export function hermesCheckout(): string {
   return join(homedir(), ".hermes", "hermes-agent");
 }

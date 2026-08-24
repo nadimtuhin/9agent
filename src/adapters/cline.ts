@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
+import { clineSpec, containerizeUrl, resolveImage, runSandbox } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,9 +22,7 @@ export function buildClineArgs(opts: {
 export const clineAdapter: AgentAdapter = {
   name: "cline",
   aliases: ["cl"],
-  supportsSandbox: false,
-  sandboxRefusal:
-    "cline: --sandbox is not supported — cline is an external CLI. Run it on the host.",
+  supportsSandbox: true,
   async detect() {
     try {
       await execFileAsync("which", ["cline"]);
@@ -34,6 +33,24 @@ export const clineAdapter: AgentAdapter = {
   },
   async launch(opts: LaunchOptions) {
     const args = buildClineArgs(opts);
+
+    if (opts.sandbox) {
+      const spec = clineSpec();
+      const env = {
+        OPENAI_BASE_URL: containerizeUrl(opts.baseUrl),
+        OPENAI_API_KEY: opts.apiKey,
+      };
+      if (opts.dryRun) {
+        console.error("--- cline sandbox dry run ---");
+        console.error("image:", resolveImage(spec));
+        console.error("env: OPENAI_BASE_URL=" + env.OPENAI_BASE_URL);
+        console.error("env: OPENAI_API_KEY=<redacted>");
+        return;
+      }
+      console.error(`cline: launching sandboxed with model=${opts.model}`);
+      await runSandbox(spec, "cline", args, env);
+      return;
+    }
 
     if (opts.dryRun) {
       console.error("--- cline dry run ---");

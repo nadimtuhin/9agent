@@ -63,7 +63,7 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--auto-approve"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
-    sandbox: false,
+    sandbox: true,
   },
   {
     name: "jcode",
@@ -184,7 +184,7 @@ describe("external adapter CLI routing", () => {
           const r = runIsolated("-a", c.name, "--sandbox", "--print-only", "--model", "claude-sonnet-5", "--gateway", DEAD);
           assert.equal(r.status, 0, r.stderr);
           const out = r.stdout + r.stderr;
-          assert.match(out, /9agent\/(aider|opencode):[0-9a-f]{12}/);
+          assert.match(out, /9agent\/(aider|opencode|cline|kilocode):[0-9a-f]{12}/);
           assert.match(out, /host\.docker\.internal/);
         });
       }

@@ -22,6 +22,8 @@ import {
   opencodeSpec,
   containerizeConfigText,
   piSpec,
+  clineSpec,
+  kilocodeSpec,
   buildSandboxArgs,
   containerizeUrl,
   dockerCommand,
@@ -137,7 +139,10 @@ describe("containerizeConfigText", () => {
 describe("every agent spec", () => {
   it("points at a Dockerfile that exists", () => {
     // Sandbox is for every agent, so every spec must ship its image recipe.
-    for (const spec of [claudeSpec(), piSpec(), aiderSpec(), opencodeSpec()]) {
+    for (const spec of [
+      claudeSpec(), piSpec(), hermesSpec(), aiderSpec(),
+      opencodeSpec(), clineSpec(), kilocodeSpec(),
+    ]) {
       assert.ok(existsSync(spec.dockerfile), spec.dockerfile);
     }
   });
@@ -148,8 +153,10 @@ describe("every agent spec", () => {
       hermesSpec(),
       aiderSpec(),
       opencodeSpec(),
+      clineSpec(),
+      kilocodeSpec(),
     ].map((s) => s.repo);
-    assert.equal(new Set(repos).size, 5);
+    assert.equal(new Set(repos).size, 7);
   });
 });
 

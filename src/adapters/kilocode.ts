@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
+import { kilocodeSpec, containerizeUrl, resolveImage, runSandbox } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -35,6 +36,24 @@ export const kilocodeAdapter: AgentAdapter = {
   },
   async launch(opts: LaunchOptions) {
     const args = buildKilocodeArgs(opts);
+
+    if (opts.sandbox) {
+      const spec = kilocodeSpec();
+      const env = {
+        OPENAI_BASE_URL: containerizeUrl(opts.baseUrl),
+        OPENAI_API_KEY: opts.apiKey,
+      };
+      if (opts.dryRun) {
+        console.error("--- kilocode sandbox dry run ---");
+        console.error("image:", resolveImage(spec));
+        console.error("env: OPENAI_BASE_URL=" + env.OPENAI_BASE_URL);
+        console.error("env: OPENAI_API_KEY=<redacted>");
+        return;
+      }
+      console.error(`kilocode: launching sandboxed with model=${opts.model}`);
+      await runSandbox(spec, "kilocode", args, env);
+      return;
+    }
 
     if (opts.dryRun) {
       console.error("--- kilocode dry run ---");
