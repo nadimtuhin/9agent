@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { runHost } from "./host.js";
@@ -498,14 +498,25 @@ export function assertMountableCwd(cwd: string): void {
   // Normalise first. The old exact-string check let `/Users` through — the
   // parent of home, so strictly worse than the case it refused — along with the
   // trailing-slash and /private spellings of home itself.
+  // Resolve symlinks so /tmp and /private/tmp (macOS) compare equal.
+  // When cwd doesn't exist yet, resolve through its parent instead.
   let real: string;
   try {
     real = realpathSync(cwd);
   } catch {
-    real = cwd;
+    try {
+      real = join(realpathSync(dirname(cwd)), basename(cwd));
+    } catch {
+      real = cwd;
+    }
   }
-  const home = homedir();
-  const tooBroad = ["/", "/Users", "/home", "/etc", "/var", "/tmp", home, dirname(home)];
+  let home: string;
+  try {
+    home = realpathSync(homedir());
+  } catch {
+    home = homedir();
+  }
+  const tooBroad = ["/", "/Users", "/home", "/etc", "/var", "/tmp", "/private/tmp", home, dirname(home)];
   // Refusing ~/.anything covers ~/.ssh and ~/.aws without naming them all.
   // Not join(home, ".") — path.join normalises the "." away and that prefix
   // then matches the whole home directory, refusing every project under it.
