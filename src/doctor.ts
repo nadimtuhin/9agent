@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { REGISTRY } from "./adapters/base.js";
 import type { AgentAdapter } from "./adapters/base.js";
+import { dockerCommand } from "./runner/sandbox.js";
 
 export type CheckStatus = "ok" | "warn" | "fail";
 
@@ -99,11 +100,12 @@ async function checkAgents(deps: DoctorDeps): Promise<Check> {
 }
 
 async function checkDocker(deps: DoctorDeps): Promise<Check> {
-  const which = await deps.exec("docker", ["--version"]);
+  const [bin, ...prefix] = dockerCommand();
+  const which = await deps.exec(bin, [...prefix, "--version"]);
   if (which.status !== 0) {
     return { name: "docker", status: "warn", detail: "not found on PATH — only needed for --sandbox" };
   }
-  const info = await deps.exec("docker", ["info"]);
+  const info = await deps.exec(bin, [...prefix, "info"]);
   if (info.status !== 0) {
     return { name: "docker", status: "warn", detail: "installed, but the daemon is not responding — only needed for --sandbox" };
   }

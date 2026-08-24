@@ -73,6 +73,11 @@ export function containerizeConfigText(text: string): string {
   return text.replace(/https?:\/\/[^\s"',}\]>)`<]+/g, (url) => containerizeUrl(url));
 }
 
+export function dockerCommand(): string[] {
+  const raw = process.env.NINEAGENT_DOCKER_BIN?.trim();
+  return raw ? raw.split(/\s+/) : ["docker"];
+}
+
 export function shadowConfigDir(agent: string): string {
   return join(homedir(), ".cache", "9agent", "sandbox", agent);
 }
@@ -238,8 +243,9 @@ export function resolveImage(spec: SandboxSpec): string {
 }
 
 export async function ensureImage(spec: SandboxSpec, image: string): Promise<void> {
+  const [bin, ...prefix] = dockerCommand();
   try {
-    await execFileAsync("docker", ["image", "inspect", image]);
+    await execFileAsync(bin, [...prefix, "image", "inspect", image]);
     return;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
@@ -428,5 +434,6 @@ export async function runSandbox(
       ...extraMounts,
     ],
   });
-  await runHost("docker", argv, {});
+  const [dockerBin, ...dockerPrefix] = dockerCommand();
+  await runHost(dockerBin, [...dockerPrefix, ...argv], {});
 }

@@ -51,6 +51,11 @@ from `--key`, else `NINEROUTER_KEY`, else `LOCAL_9ROUTER_KEY`, else the
 reaches the gateway as a remote client, where the placeholder is rejected and a
 real key is required.
 
+Sandbox runs invoke `docker` from PATH; set `NINEAGENT_DOCKER_BIN` to route them
+through something else, e.g. `NINEAGENT_DOCKER_BIN="sudo -n docker"` (requires
+passwordless sudo). Prefer adding yourself to the `docker` group — group
+membership and sudo grant the same power with less ceremony.
+
 Anything after `--` goes to the agent verbatim:
 
 ```bash

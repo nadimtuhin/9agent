@@ -70,6 +70,10 @@ Whether an Agent can be sandboxed is declared by its Adapter, the same way an
 Adapter declares it cannot honour a PermissionMode. An Adapter that cannot must
 refuse; silently ignoring a security-shaped flag is the dangerous failure.
 
+The container runtime is exec'd as `docker` by default; `NINEAGENT_DOCKER_BIN`
+overrides the command (whitespace-split argv, e.g. `"sudo -n docker"`), so every
+Docker touchpoint — build, inspect, run, doctor — goes through the same door.
+
 ## ShadowConfig
 
 A rewritten copy of an Agent's config, generated for a Sandbox and mounted

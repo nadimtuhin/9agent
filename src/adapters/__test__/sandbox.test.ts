@@ -24,6 +24,7 @@ import {
   piSpec,
   buildSandboxArgs,
   containerizeUrl,
+  dockerCommand,
   imageTag,
   type SandboxSpec,
 } from "../../runner/sandbox.js";
@@ -276,6 +277,36 @@ describe("hermesSpec", () => {
   });
   it("builds from hermes' own checkout, not a Dockerfile we wrote", () => {
     assert.equal(hermesSpec().buildContext, hermesCheckout());
+  });
+});
+
+describe("dockerCommand", () => {
+  const withEnv = (value: string | undefined, fn: () => void) => {
+    const saved = process.env.NINEAGENT_DOCKER_BIN;
+    try {
+      if (value === undefined) delete process.env.NINEAGENT_DOCKER_BIN;
+      else process.env.NINEAGENT_DOCKER_BIN = value;
+      fn();
+    } finally {
+      if (saved === undefined) delete process.env.NINEAGENT_DOCKER_BIN;
+      else process.env.NINEAGENT_DOCKER_BIN = saved;
+    }
+  };
+
+  it("defaults to bare docker so nothing changes for normal users", () => {
+    withEnv(undefined, () => assert.deepEqual(dockerCommand(), ["docker"]));
+  });
+
+  it("splits NINEAGENT_DOCKER_BIN into argv so a sudo prefix works", () => {
+    // Kept as argv, never joined into a shell string: the launcher's
+    // no-shell-string rule applies to our own override too.
+    withEnv("sudo -n docker", () =>
+      assert.deepEqual(dockerCommand(), ["sudo", "-n", "docker"]),
+    );
+  });
+
+  it("falls back to bare docker when the override is whitespace only", () => {
+    withEnv("   ", () => assert.deepEqual(dockerCommand(), ["docker"]));
   });
 });
 
