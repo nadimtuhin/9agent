@@ -1,0 +1,56 @@
+name: Release
+
+# Fires on the tag `scripts/release.sh` pushes once its local gate, build,
+# and packed-tarball smoke test all pass. This job re-runs the gate against
+# the tagged commit and does the actual `npm publish` — the npm token lives
+# only here, as a repo secret, never on a contributor's machine.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # id-token:write is what lets `npm publish --provenance` mint a Sigstore
+    # attestation tying the published tarball back to this exact workflow run.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # Same gate `scripts/release.sh` already ran locally — cheap, and closes
+      # the gap where a tag was pushed by hand without it.
+      - run: npm run check
+
+      # The tag is the source of truth for what "this release" means; refuse
+      # to publish a package.json that disagrees with it.
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "FAIL: tag v$TAG_VERSION does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - run: npm run build
+
+      # `prepack` would rebuild anyway, but the explicit build above plus
+      # `--ignore-scripts` here means CI's own npm config can't silently skip
+      # it the way scripts/release.sh guards against for local publishes.
+      - name: Publish
+        run: npm publish --ignore-scripts --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -61,10 +61,18 @@ grep -q "Is 9Router running?" <<<"$DOUT" \
   || { echo "FAIL: offline path did not produce its usual error:"; echo "$DOUT"; exit 1; }
 echo "    ok  packed CLI runs, reports ${VERSION}, and fails legibly offline"
 
-echo "==> publish"
+echo "==> tag"
+# The actual `npm publish` happens in CI (.github/workflows/release.yml),
+# triggered by this tag — not here. That keeps the npm token in one place
+# (a repo secret) instead of every contributor's local ~/.npmrc, and means
+# the published tarball is the one CI just built from this exact commit,
+# not whatever happened to be sitting in a laptop's node_modules.
 if [ "${DRY_RUN:-0}" = "1" ]; then
-  echo "    DRY_RUN=1 — stopping before publish. Tarball: ${TARBALL}"
+  echo "    DRY_RUN=1 — stopping before tagging. Tarball: ${TARBALL}"
   exit 0
 fi
-npm publish "$TARBALL" --access public
-echo "published 9agent@${VERSION}"
+git diff --quiet && git diff --cached --quiet \
+  || { echo "FAIL: working tree changed during release checks."; exit 1; }
+git tag -a "v${VERSION}" -m "Release v${VERSION}"
+git push origin "v${VERSION}"
+echo "tagged v${VERSION} — CI will publish to npm"

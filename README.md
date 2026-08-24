@@ -104,7 +104,7 @@ npm install
 npm run dev          # tsx
 npm run check        # typecheck, build, unit tests
 npm run test:docker  # integration harness (needs Docker)
-npm run release      # gate, build, verify the tarball, publish
+npm run release      # gate, build, verify the tarball, tag — CI publishes to npm
 ```
 
 ## Contributing
