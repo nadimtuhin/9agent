@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-// ponytail: runHost calls process.exit, so it can only be observed from a child.
+// runHost calls process.exit, so it can only be observed from a child.
 const HOST = fileURLToPath(new URL("../../runner/host.ts", import.meta.url));
 const ROOT = join(fileURLToPath(new URL("../../..", import.meta.url)));
 

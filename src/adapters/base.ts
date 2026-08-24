@@ -19,7 +19,7 @@ export interface AgentAdapter {
   launch(opts: LaunchOptions): Promise<void>;
 }
 
-// Ponytail: registry filled in index.ts — avoids circular import
+// registry filled in index.ts — avoids circular import
 export const REGISTRY: AgentAdapter[] = [];
 
 /**

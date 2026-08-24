@@ -1,4 +1,4 @@
-// ponytail: pure arg validation lives outside index.ts so it is importable
+// Pure arg validation lives outside index.ts so it is importable
 // without triggering commander's parse side effect.
 export function parseYes(mode: string): boolean {
   if (mode === "dangerous") return true;
@@ -18,7 +18,7 @@ export function resolveKey(flag?: string): string {
  *  is already fetched before this runs, so validating costs no extra request. */
 export function assertModelExists(model: string, ids: readonly string[]): void {
   if (ids.includes(model)) return;
-  // ponytail: substring match for the hint, same rule the picker filters by.
+  // Substring match for the hint, same rule the picker filters by.
   // Levenshtein if plain substring proves too blunt in practice.
   const near = ids.filter((id) => id.includes(model) || model.includes(id)).slice(0, 5);
   const hint = near.length

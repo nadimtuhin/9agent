@@ -15,7 +15,7 @@ export async function runHost(
   const child = spawn(bin, args, options);
   return new Promise((resolve, reject) => {
     child.on("error", reject);
-    // ponytail: the launcher is a passthrough — mirror the child's fate, don't
+    // The launcher is a passthrough — mirror the child's fate, don't
     // interpret it. Signals (Ctrl-C) exit silently; codes propagate verbatim.
     child.on("exit", (code, signal) => {
       if (signal) process.exit(128 + (os.constants.signals[signal] ?? 15));

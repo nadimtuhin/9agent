@@ -98,7 +98,7 @@ export const hermesAdapter: AgentAdapter = {
       return;
     }
 
-    // ponytail: no api-key warning. --provider 9router means hermes reads its key
+    // no api-key warning. --provider 9router means hermes reads its key
     // from its own config, and the empty env below never carries opts.apiKey.
     await runHost("hermes", args, {});
   },

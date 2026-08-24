@@ -88,7 +88,7 @@ export async function discoverModels(
   apiKey: string,
   cachePath: string = CACHE_PATH,
 ): Promise<ModelEntry[]> {
-  // ponytail: only a transport failure means "offline". An HTTP status (401, 500)
+  // only a transport failure means "offline". An HTTP status (401, 500)
   // or a bad payload is a real error and must surface, not be masked by cache.
   let res: Response;
   try {
