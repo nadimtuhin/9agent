@@ -125,18 +125,22 @@ async function resolveModel(
   flag: string | undefined,
   modelsPromise: Promise<ModelEntry[]>,
 ): Promise<string> {
-  const models = await awaitModels(modelsPromise, {
-    stream: process.stderr,
-    isTTY: process.stderr.isTTY,
-  });
-
   if (flag) {
+    const models = await awaitModels(modelsPromise, {
+      stream: process.stderr,
+      isTTY: process.stderr.isTTY,
+    });
     assertModelExists(
       flag,
       models.map((m) => m.id),
     );
     return flag;
   }
+
+  const models = await awaitModels(modelsPromise, {
+    stream: process.stderr,
+    isTTY: process.stderr.isTTY,
+  });
 
   if (!process.stdin.isTTY) {
     throw new Error("No TTY — pass --model <id> to pick a model.");
@@ -199,7 +203,9 @@ async function main(opts: ProgramOpts) {
 
   if (options.sandbox) assertSandboxSupported(adapter);
 
-  const model = await resolveModel(options.model, modelsPromise);
+  const model = options.printOnly && options.model
+    ? options.model
+    : await resolveModel(options.model, modelsPromise);
 
   if (options.yolo && options.yes === "safe") {
     throw new Error("--yolo and --yes safe contradict each other; pass one.");
