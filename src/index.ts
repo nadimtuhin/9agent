@@ -12,10 +12,16 @@ import { claudeAdapter } from "./adapters/claude.js";
 import { clineAdapter } from "./adapters/cline.js";
 import { codexAdapter } from "./adapters/codex.js";
 import { hermesAdapter } from "./adapters/hermes.js";
+import { jcodeAdapter } from "./adapters/jcode.js";
+import { kilocodeAdapter } from "./adapters/kilocode.js";
+import { opencodeAdapter } from "./adapters/opencode.js";
 import { piAdapter } from "./adapters/pi.js";
 import type { LaunchOptions } from "./adapters/base.js";
 
-REGISTRY.push(aiderAdapter, claudeAdapter, clineAdapter, codexAdapter, hermesAdapter, piAdapter);
+REGISTRY.push(
+  aiderAdapter, claudeAdapter, clineAdapter, codexAdapter,
+  hermesAdapter, jcodeAdapter, kilocodeAdapter, opencodeAdapter, piAdapter,
+);
 
 const program = new Command();
 
