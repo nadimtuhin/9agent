@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
 import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { runUpdate } from "./update.js";
+import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { runDoctor, defaultDoctorDeps } from "./doctor.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { aiderAdapter } from "./adapters/aider.js";
@@ -80,8 +81,17 @@ program
   .command("update")
   .description("update 9agent to the latest published version")
   .option("--dry-run", "print the npm command, run nothing")
-  .action(async (opts: { dryRun?: boolean }) => {
+  .option("--force", "update even if already on the latest version")
+  .action(async (opts: { dryRun?: boolean; force?: boolean }) => {
     try {
+      if (!opts.force) {
+        const check = await checkForUpdate(pkg.version, { skipCache: true });
+        if (!check.updateAvailable) {
+          console.log(`Already on the latest version (${pkg.version}).`);
+          return;
+        }
+        console.log(`Updating ${check.current} → ${check.latest}...`);
+      }
       console.log(await runUpdate({ dryRun: opts.dryRun }));
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
@@ -101,6 +111,7 @@ program
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
   .option("--sandbox", "run the agent in a Docker container")
+  .option("--no-update", "skip the startup version check")
   .argument("[args...]", "extra args passed through to the agent")
   .action(async (args: string[], opts: Omit<ProgramOpts, "args">) => {
     try {
@@ -120,6 +131,7 @@ interface ProgramOpts {
   yes?: string;
   printOnly: boolean;
   sandbox: boolean;
+  update: boolean;
   args: string[];
 }
 
@@ -158,6 +170,10 @@ async function resolveModel(
 }
 
 async function main(opts: ProgramOpts) {
+  if (opts.update) {
+    checkForUpdate(pkg.version).then(printUpdateNotice).catch(() => void 0);
+  }
+
   const options: ProgramOpts & { key: string } = {
     agent: opts.agent,
     model: opts.model,
@@ -167,19 +183,51 @@ async function main(opts: ProgramOpts) {
     yes: opts.yes,
     printOnly: opts.printOnly ?? false,
     sandbox: opts.sandbox ?? false,
+    update: opts.update ?? true,
     args: opts.args ?? [],
   };
 
   const modelsPromise = discoverModels(options.gateway, options.key);
   modelsPromise.catch((_e: unknown) => { void _e; });
 
+  const adapter = await resolveAdapter(options.agent);
+
+  if (options.sandbox) assertSandboxSupported(adapter);
+
+  const model = options.printOnly && options.model
+    ? options.model
+    : await resolveModel(options.model, modelsPromise);
+
+  const yolo = await resolveYolo(options);
+
+  const launchOpts: LaunchOptions = {
+    model: model,
+    baseUrl: options.gateway,
+    apiKey: options.key,
+    yolo,
+    extraArgs: options.args,
+    dryRun: options.printOnly,
+    sandbox: options.sandbox,
+  };
+  await adapter.launch(launchOpts);
+}
+
+async function filterInstalled(adapters: typeof REGISTRY) {
+  const result = [];
+  for (const a of adapters) {
+    if (await a.detect()) result.push(a);
+  }
+  return result;
+}
+
+async function resolveAdapter(agentName?: string) {
   let adapter = REGISTRY.find(
-    (a) => a.name === options.agent || a.aliases?.includes(options.agent ?? ""),
+    (a) => a.name === agentName || a.aliases?.includes(agentName ?? ""),
   );
 
-  if (!adapter && options.agent) {
+  if (!adapter && agentName) {
     throw new Error(
-      `Unknown agent '${options.agent}'. Known: ${REGISTRY.map((a) => a.name).join(", ")}.`,
+      `Unknown agent '${agentName}'. Known: ${REGISTRY.map((a) => a.name).join(", ")}.`,
     );
   }
 
@@ -203,17 +251,16 @@ async function main(opts: ProgramOpts) {
     adapter = answer;
   }
 
-  if (options.sandbox) assertSandboxSupported(adapter);
+  return adapter;
+}
 
-  const model = options.printOnly && options.model
-    ? options.model
-    : await resolveModel(options.model, modelsPromise);
-
-  if (options.yolo && options.yes === "safe") {
+async function resolveYolo(opts: ProgramOpts & { key: string }) {
+  if (opts.yolo && opts.yes === "safe") {
     throw new Error("--yolo and --yes safe contradict each other; pass one.");
   }
-  let yolo = options.yolo;
-  if (!yolo && !options.yes && process.stdin.isTTY) {
+  if (opts.yolo) return true;
+  if (opts.yes !== undefined) return parseYes(opts.yes);
+  if (process.stdin.isTTY) {
     const mode = await select({
       message: "Mode:",
       choices: [
@@ -221,29 +268,9 @@ async function main(opts: ProgramOpts) {
         { name: "dangerous (skip permissions)", value: true },
       ],
     });
-    yolo = mode;
-  } else if (options.yes !== undefined) {
-    yolo = parseYes(options.yes);
+    return mode;
   }
-
-  const launchOpts: LaunchOptions = {
-    model: model,
-    baseUrl: options.gateway,
-    apiKey: options.key,
-    yolo,
-    extraArgs: options.args,
-    dryRun: options.printOnly,
-    sandbox: options.sandbox,
-  };
-  await adapter.launch(launchOpts);
-}
-
-async function filterInstalled(adapters: typeof REGISTRY) {
-  const result = [];
-  for (const a of adapters) {
-    if (await a.detect()) result.push(a);
-  }
-  return result;
+  return false;
 }
 
 program.parse();

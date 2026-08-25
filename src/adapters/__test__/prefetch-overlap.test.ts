@@ -89,7 +89,7 @@ describe("model prefetch overlaps the agent picker", () => {
         "30",
         "-c",
         ROOT,
-        `node ${ENTRY} --gateway http://127.0.0.1:${gw.port}/v1`,
+        `node ${ENTRY} --no-update --gateway http://127.0.0.1:${gw.port}/v1`,
       );
 
       await sleep(SAMPLE_AT_MS);

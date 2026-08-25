@@ -5,6 +5,7 @@ export function parseYes(mode: string): boolean {
 }
 
 export function resolveKey(flag?: string): string {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty strings should be treated as unset
   return flag || process.env.NINEROUTER_KEY || process.env.LOCAL_9ROUTER_KEY || "sk_9router";
 }
 

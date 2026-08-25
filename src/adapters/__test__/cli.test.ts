@@ -54,10 +54,9 @@ describe("update subcommand routing", () => {
   // and forwarded it to the agent as a passthrough arg. Commander only matches
   // the subcommand first because it is registered ahead of the root action.
   it("runs update instead of forwarding it to an agent", () => {
-    const r = runIsolated("update", "--dry-run");
+    const r = runIsolated("update", "--force", "--dry-run");
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /npm install -g 9agent@latest/);
-    // The agent path would have hit the picker or a gateway error instead.
     assert.doesNotMatch(r.stderr, /agent|gateway|9Router/i);
   });
 
