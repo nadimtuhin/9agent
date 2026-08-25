@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { assertModelExists } from "./opts.js";
 
 export interface ModelEntry {
   id: string;
@@ -10,6 +11,39 @@ export interface ModelEntry {
 }
 
 export const CACHE_PATH = join(homedir(), ".config", "9agent", "models.json");
+
+export function filterModels(models: ModelEntry[], input: string): ModelEntry[] {
+  const q = input.trim().toLowerCase();
+  if (q === "") return models;
+  return models.filter(
+    (m) =>
+      m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q),
+  );
+}
+
+export interface ResolvedModel {
+  model: string;
+  warning?: string;
+}
+
+export async function resolveExplicitModel(
+  flag: string,
+  modelsPromise: Promise<ModelEntry[]>,
+  stream: HintTarget,
+): Promise<ResolvedModel> {
+  let models: ModelEntry[];
+  try {
+    models = await awaitModels(modelsPromise, { stream, isTTY: false });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      model: flag,
+      warning: `9agent: gateway unreachable (${msg}) — launching '${flag}' anyway.`,
+    };
+  }
+  assertModelExists(flag, models.map((m) => m.id));
+  return { model: flag };
+}
 
 export function isModelEntryArray(x: unknown): x is ModelEntry[] {
   return (
@@ -31,6 +65,26 @@ function readCache(path: string): ModelEntry[] | null {
   } catch {
     return null;
   }
+}
+
+function normalizeModel(m: ModelEntry): ModelEntry {
+  return {
+    id: m.id,
+    owned_by: m.owned_by,
+    ...("context_window" in m ? { context_window: m.context_window } : {}),
+    ...("max_tokens" in m ? { max_tokens: m.max_tokens } : {}),
+  };
+}
+
+function serveFromCache(cachePath: string, prefix: string): ModelEntry[] | null {
+  const cached = readCache(cachePath);
+  if (cached && cached.length > 0) {
+    console.error(
+      `${prefix} — serving ${cached.length} models from cache at ${cachePath}. It may be stale.`,
+    );
+    return cached;
+  }
+  return null;
 }
 
 function writeCache(path: string, models: ModelEntry[]): void {
@@ -82,21 +136,18 @@ export async function discoverModels(
       headers: { Authorization: `Bearer ${apiKey}` },
     });
   } catch {
-    const cached = readCache(cachePath);
-    if (cached && cached.length > 0) {
-      console.error(
-        `9agent: cannot reach ${baseUrl}/models — serving ${cached.length} models from cache at ${cachePath}. It may be stale.`,
-      );
-      return cached;
-    }
+    const cached = serveFromCache(cachePath, `9agent: cannot reach ${baseUrl}/models`);
+    if (cached) return cached;
     throw new Error(
       `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
     );
   }
 
-  if (!res.ok) {
-    throw new Error(`${baseUrl}/models returned HTTP ${res.status}`);
+  if (!res.ok && res.status >= 500) {
+    const cached = serveFromCache(cachePath, `9agent: ${baseUrl}/models returned HTTP ${res.status}`);
+    if (cached) return cached;
   }
+  if (!res.ok) throw new Error(`${baseUrl}/models returned HTTP ${res.status}`);
 
   let body: unknown;
   try {
@@ -105,18 +156,15 @@ export async function discoverModels(
     throw new Error(`${baseUrl}/models returned invalid JSON`);
   }
 
+  const models = parseModels(body, baseUrl);
+  writeCache(cachePath, models);
+  return models;
+}
+
+function parseModels(body: unknown, baseUrl: string): ModelEntry[] {
   const data = (body as { data?: unknown })?.data;
   if (!isModelEntryArray(data)) {
     throw new Error(`${baseUrl}/models returned no valid 'data' array`);
   }
-
-  const models = data.map((m) => ({
-    id: m.id,
-    owned_by: m.owned_by,
-    ...("context_window" in m ? { context_window: m.context_window } : {}),
-    ...("max_tokens" in m ? { max_tokens: m.max_tokens } : {}),
-  }));
-
-  writeCache(cachePath, models);
-  return models;
+  return data.map(normalizeModel);
 }

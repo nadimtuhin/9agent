@@ -12,12 +12,14 @@ writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }])
 
 let server: Server;
 let base: string;
-let mode: "401" | "html" | "bad-data" | "ok" = "ok";
+let mode: "401" | "503" | "html" | "bad-data" | "ok" = "ok";
 
 before(async () => {
   server = createServer((_req, res) => {
     if (mode === "401") {
       res.writeHead(401).end("nope");
+    } else if (mode === "503") {
+      res.writeHead(503).end("upstream down");
     } else if (mode === "html") {
       res.writeHead(200, { "content-type": "text/html" }).end("<html>502</html>");
     } else if (mode === "bad-data") {
@@ -39,6 +41,29 @@ describe("discoverModels", () => {
   it("throws on 401 instead of serving cache", async () => {
     mode = "401";
     await assert.rejects(() => discoverModels(base, "k", cache), /HTTP 401/);
+  });
+
+  it("falls back to cache on HTTP 5xx, with a stderr note", async () => {
+    mode = "503";
+    writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }]));
+    const warnings: string[] = [];
+    const original = console.error;
+    console.error = (msg: unknown) => void warnings.push(String(msg));
+    try {
+      const models = await discoverModels(base, "k", cache);
+      assert.deepEqual(models, [{ id: "cached/model", owned_by: "cache" }]);
+    } finally {
+      console.error = original;
+    }
+    assert.match(warnings.join("\n"), /HTTP 503/);
+    assert.match(warnings.join("\n"), /from cache/);
+  });
+
+  it("throws on 5xx when there is no cache to fall back on", async () => {
+    mode = "503";
+    const empty = join(CACHE_DIR, "empty503.json");
+    writeFileSync(empty, "[]");
+    await assert.rejects(() => discoverModels(base, "k", empty), /HTTP 503/);
   });
 
   it("throws a named error on invalid JSON", async () => {

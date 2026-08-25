@@ -2,8 +2,14 @@ import { Command } from "commander";
 import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
-import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
-import { assertModelExists, parseYes, resolveKey } from "./opts.js";
+import {
+  discoverModels,
+  awaitModels,
+  resolveExplicitModel,
+  filterModels,
+  type ModelEntry,
+} from "./discovery.js";
+import { parseYes, resolveKey } from "./opts.js";
 import { runUpdate } from "./update.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { runDoctor, defaultDoctorDeps } from "./doctor.js";
@@ -140,15 +146,13 @@ async function resolveModel(
   modelsPromise: Promise<ModelEntry[]>,
 ): Promise<string> {
   if (flag) {
-    const models = await awaitModels(modelsPromise, {
-      stream: process.stderr,
-      isTTY: process.stderr.isTTY,
-    });
-    assertModelExists(
+    const { model, warning } = await resolveExplicitModel(
       flag,
-      models.map((m) => m.id),
+      modelsPromise,
+      process.stderr,
     );
-    return flag;
+    if (warning) console.error(warning);
+    return model;
   }
 
   const models = await awaitModels(modelsPromise, {
@@ -163,9 +167,10 @@ async function resolveModel(
   return search<string>({
     message: "Pick a model:",
     source: (input) =>
-      models
-        .filter((m) => m.id.includes(input ?? "") || m.owned_by.includes(input ?? ""))
-        .map((m) => ({ name: `${m.id} — ${m.owned_by}`, value: m.id })),
+      filterModels(models, input ?? "").map((m) => ({
+        name: `${m.id} — ${m.owned_by}`,
+        value: m.id,
+      })),
   });
 }
 
@@ -175,16 +180,12 @@ async function main(opts: ProgramOpts) {
   }
 
   const options: ProgramOpts & { key: string } = {
-    agent: opts.agent,
-    model: opts.model,
-    yolo: opts.yolo ?? false,
-    gateway: opts.gateway,
+    ...opts,
     key: resolveKey(opts.key),
-    yes: opts.yes,
+    yolo: opts.yolo ?? false,
     printOnly: opts.printOnly ?? false,
     sandbox: opts.sandbox ?? false,
     update: opts.update ?? true,
-    args: opts.args ?? [],
   };
 
   const modelsPromise = discoverModels(options.gateway, options.key);
