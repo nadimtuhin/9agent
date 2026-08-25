@@ -6,7 +6,7 @@ docker compose -f docker-compose.test.yml build
 # The image seeds a 'stale/never-use-me' cache, so these services must reach the
 # router for real: any cache fallback announces itself and fails the run here.
 # (--model is passed explicitly, so the model id alone proves nothing.)
-for svc in test-claude test-pi test-hermes; do
+for svc in test-claude test-pi test-hermes test-command-code-print; do
   out=$(docker compose -f docker-compose.test.yml up --exit-code-from "$svc" "$svc" 2>&1) || rc=$?
   echo "$out"
   [ "${rc:-0}" = "0" ] || { echo "FAIL: $svc exited ${rc}"; exit 1; }
@@ -27,6 +27,13 @@ grep -q "host.docker.internal:host-gateway" <<<"$out" || { echo "FAIL: sandbox a
 # loopback->host.docker.internal rewrite is covered by containerizeUrl unit tests.
 grep -q "ANTHROPIC_BASE_URL=http://mock-router:20128/v1" <<<"$out" || { echo "FAIL: non-loopback gateway was rewritten"; exit 1; }
 grep -q "ANTHROPIC_AUTH_TOKEN=…redacted" <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
+
+# command-code sandbox --print-only must compose docker argv with shadow providers.json mount
+out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-command-code-sandbox test-command-code-sandbox 2>&1) || rc=$?
+echo "$out"
+[ "${rc:-0}" = "0" ] || { echo "FAIL: test-command-code-sandbox exited ${rc}"; exit 1; }
+grep -q "host.docker.internal:host-gateway" <<<"$out" || { echo "FAIL: command-code sandbox argv missing --add-host"; exit 1; }
+grep -q "providers.json:/home/node/.commandcode/providers.json:ro" <<<"$out" || { echo "FAIL: command-code sandbox argv missing shadow config mount"; exit 1; }
 
 # --sandbox with a missing prerequisite must ERROR, never fall back to unsandboxed.
 # hermes can only be built from its own checkout, which is absent in here.
