@@ -24,14 +24,24 @@ export function buildCommandCodeEnv(opts: {
   };
 }
 
+const KNOWN_PROVIDER_PREFIXES = [
+  "cmd/", "deepseek/", "google/", "meta/", "minimaxai/", "moonshotai/",
+  "nvidia/", "poolside/", "qwen/", "sakana/", "stealth/", "stepfun/",
+  "tencent/", "thinkingmachines/", "xai/", "xiaomi/", "zai-org/",
+];
+
 export function buildCommandCodeArgs(opts: {
   model: string;
   yolo: boolean;
   extraArgs: string[];
 }): string[] {
+  const needsPrefix = opts.model.includes("/") &&
+    !opts.model.startsWith("9router/") &&
+    !KNOWN_PROVIDER_PREFIXES.some((p) => opts.model.startsWith(p));
+  const model = needsPrefix ? `9router/${opts.model}` : opts.model;
   return [
     "-m",
-    opts.model,
+    model,
     ...(opts.yolo ? ["--yolo"] : []),
     ...opts.extraArgs,
   ];

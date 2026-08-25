@@ -96,7 +96,7 @@ describe("command-code adapter: buildCommandCodeEnv", () => {
 describe("command-code adapter: buildCommandCodeArgs", () => {
   it("passes model via -m flag", () => {
     const args = buildCommandCodeArgs({ model: "lc/LongCat-2.0", yolo: false, extraArgs: [] });
-    assert.deepEqual(args, ["-m", "lc/LongCat-2.0"]);
+    assert.deepEqual(args, ["-m", "9router/lc/LongCat-2.0"]);
   });
   it("includes --yolo in dangerous mode", () => {
     const args = buildCommandCodeArgs({ model: "m", yolo: true, extraArgs: [] });
@@ -105,5 +105,13 @@ describe("command-code adapter: buildCommandCodeArgs", () => {
   it("appends extraArgs after --yolo", () => {
     const args = buildCommandCodeArgs({ model: "m", yolo: true, extraArgs: ["--verbose"] });
     assert.deepEqual(args, ["-m", "m", "--yolo", "--verbose"]);
+  });
+  it("does not prefix native command-code models", () => {
+    const args = buildCommandCodeArgs({ model: "google/gemini-3.7-flash", yolo: false, extraArgs: [] });
+    assert.deepEqual(args, ["-m", "google/gemini-3.7-flash"]);
+  });
+  it("does not double-prefix 9router models", () => {
+    const args = buildCommandCodeArgs({ model: "9router/ag/gemini-3.7-flash-low", yolo: false, extraArgs: [] });
+    assert.deepEqual(args, ["-m", "9router/ag/gemini-3.7-flash-low"]);
   });
 });
