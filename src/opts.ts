@@ -5,7 +5,7 @@ export function parseYes(mode: string): boolean {
 }
 
 export function resolveKey(flag?: string): string {
-  return flag ?? process.env.NINEROUTER_KEY ?? process.env.LOCAL_9ROUTER_KEY ?? "sk_9router";
+  return flag || process.env.NINEROUTER_KEY || process.env.LOCAL_9ROUTER_KEY || "sk_9router";
 }
 
 export function assertModelExists(model: string, ids: readonly string[]): void {
