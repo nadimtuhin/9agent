@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildClaudeEnv, buildClaudeArgs } from "../claude.js";
+import { buildCommandCodeArgs, buildCommandCodeEnv } from "../commandcode.js";
 import { buildPiArgs } from "../pi.js";
 import { buildHermesArgs } from "../hermes.js";
 
@@ -78,5 +79,31 @@ describe("hermes adapter: buildHermesArgs", () => {
       "--yolo",
       "--verbose",
     ]);
+  });
+});
+
+describe("command-code adapter: buildCommandCodeEnv", () => {
+  it("sets gateway routing env vars", () => {
+    const env = buildCommandCodeEnv({
+      baseUrl: "http://localhost:20128/v1",
+      apiKey: "sk_9router",
+    });
+    assert.equal(env.ANTHROPIC_BASE_URL, "http://localhost:20128/v1");
+    assert.equal(env.ANTHROPIC_AUTH_TOKEN, "sk_9router");
+  });
+});
+
+describe("command-code adapter: buildCommandCodeArgs", () => {
+  it("passes model via -m flag", () => {
+    const args = buildCommandCodeArgs({ model: "lc/LongCat-2.0", yolo: false, extraArgs: [] });
+    assert.deepEqual(args, ["-m", "lc/LongCat-2.0"]);
+  });
+  it("includes --yolo in dangerous mode", () => {
+    const args = buildCommandCodeArgs({ model: "m", yolo: true, extraArgs: [] });
+    assert.deepEqual(args, ["-m", "m", "--yolo"]);
+  });
+  it("appends extraArgs after --yolo", () => {
+    const args = buildCommandCodeArgs({ model: "m", yolo: true, extraArgs: ["--verbose"] });
+    assert.deepEqual(args, ["-m", "m", "--yolo", "--verbose"]);
   });
 });

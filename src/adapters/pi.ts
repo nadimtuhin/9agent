@@ -51,8 +51,8 @@ export const piAdapter: AgentAdapter = {
       const known = piKnowsModel(readFileSync(modelsJson, "utf-8"), opts.model);
       if (known === false) {
         console.error(
-          `pi: ${opts.model} is not listed in ${modelsJson}, so pi will treat it as a ` +
-            `custom id and guess its context limits. Routing still works. Add it there to fix the limits.`,
+          `pi: ${opts.model} is not in ${modelsJson} — pi will guess context limits. ` +
+            `Add it there to fix.`,
         );
       }
     }
@@ -92,13 +92,7 @@ export const piAdapter: AgentAdapter = {
     const expected = "http://localhost:20128/v1";
     if (opts.baseUrl !== expected) {
       console.error(
-        `pi: base URL is ${opts.baseUrl}, expected ${expected}. Custom gateway needs models.json seeding (v2).`,
-      );
-    }
-
-    if (opts.yolo) {
-      console.error(
-        "pi: --yolo is a no-op; Pi has no built-in permission system. Pass --sandbox to bound the blast radius.",
+        `pi: base URL is ${opts.baseUrl} — pi routes via ${modelsJson}, not env vars.`,
       );
     }
 

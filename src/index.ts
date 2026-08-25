@@ -11,6 +11,7 @@ import { aiderAdapter } from "./adapters/aider.js";
 import { claudeAdapter } from "./adapters/claude.js";
 import { clineAdapter } from "./adapters/cline.js";
 import { codexAdapter } from "./adapters/codex.js";
+import { commandCodeAdapter } from "./adapters/commandcode.js";
 import { hermesAdapter } from "./adapters/hermes.js";
 import { jcodeAdapter } from "./adapters/jcode.js";
 import { kilocodeAdapter } from "./adapters/kilocode.js";
@@ -20,7 +21,8 @@ import type { LaunchOptions } from "./adapters/base.js";
 
 REGISTRY.push(
   aiderAdapter, claudeAdapter, clineAdapter, codexAdapter,
-  hermesAdapter, jcodeAdapter, kilocodeAdapter, opencodeAdapter, piAdapter,
+  commandCodeAdapter, hermesAdapter, jcodeAdapter, kilocodeAdapter,
+  opencodeAdapter, piAdapter,
 );
 
 const program = new Command();

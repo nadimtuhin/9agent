@@ -27,6 +27,14 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
+  test-command-code-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent command-code --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-command-code-sandbox:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent command-code --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
   # a missing sandbox prerequisite must be an error, never a silent unsandboxed run
   test-sandbox-no-checkout:
     build: .

@@ -23,9 +23,7 @@ export function buildKilocodeArgs(opts: {
 export const kilocodeAdapter: AgentAdapter = {
   name: "kilocode",
   aliases: ["kc", "kilo"],
-  supportsSandbox: false,
-  sandboxRefusal:
-    "kilocode: --sandbox is not supported — kilocode is an external CLI. Run it on the host.",
+  supportsSandbox: true,
   async detect() {
     try {
       await execFileAsync("which", ["kilocode"]);

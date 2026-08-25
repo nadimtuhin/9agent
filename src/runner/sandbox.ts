@@ -225,6 +225,17 @@ export function kilocodeSpec(): SandboxSpec {
   };
 }
 
+export function commandCodeSpec(): SandboxSpec {
+  return {
+    repo: "9agent/command-code",
+    dockerfile: dockerfilePath("commandcode.Dockerfile"),
+    agentHome: join(homedir(), ".commandcode"),
+    containerHome: "/home/node/.commandcode",
+    user: "node",
+    gitconfigTarget: "/home/node/.gitconfig",
+  };
+}
+
 export function hermesCheckout(): string {
   return join(homedir(), ".hermes", "hermes-agent");
 }
