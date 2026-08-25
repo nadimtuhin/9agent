@@ -45,6 +45,86 @@ services:
     build: .
     depends_on: { mock-router: { condition: service_healthy } }
     command: --agent claude --gateway http://mock-router:20128/v1 --yes safe
+  # --- adapter --print-only (loop in harness) ---
+  test-aider-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent aider --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-cline-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent cline --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-codex-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent codex --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-jcode-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent jcode --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-kilocode-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent kilocode --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-opencode-print:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent opencode --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  # alias resolution: -a c must resolve to claude
+  test-alias-c:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent c --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  # --- sandbox --print-only (standalone in harness) ---
+  test-aider-sandbox:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent aider --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
+  test-cline-sandbox:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent cline --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
+  test-opencode-sandbox:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent opencode --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
+  test-kilocode-sandbox:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent kilocode --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox --print-only
+  # --- sandbox refusal (standalone, expect failure) ---
+  test-codex-sandbox-refuse:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent codex --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox
+  test-jcode-sandbox-refuse:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent jcode --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --sandbox
+  # --- CLI validation errors (standalone, expect failure) ---
+  test-unknown-agent:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent foo --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes safe --print-only
+  test-yolo-yes-conflict:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yolo --yes safe --print-only
+  test-invalid-yes:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    command: --agent claude --model mock/claude-sonnet-4-6 --gateway http://mock-router:20128/v1 --yes maybe --print-only
+  test-no-tty-no-agent:
+    build: .
+    depends_on: { mock-router: { condition: service_healthy } }
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/claude &&
+        chmod +x /usr/local/bin/claude &&
+        node dist/index.js --model mock/claude-sonnet-4-6
+        --gateway http://mock-router:20128/v1 --yes safe --print-only
+  # --- existing tests ---
   # actually reaches runHost: a stub agent that exits 7 must make 9agent exit 7
   test-exit-code:
     build: .
