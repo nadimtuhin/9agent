@@ -144,7 +144,11 @@ describe("every agent spec", () => {
       claudeSpec(), piSpec(), hermesSpec(), aiderSpec(),
       opencodeSpec(), clineSpec(), kilocodeSpec(), commandCodeSpec(),
     ]) {
-      assert.ok(existsSync(spec.dockerfile), spec.dockerfile);
+      const exists = existsSync(spec.dockerfile);
+      if (!exists) {
+        console.error(`MISSING DOCKERFILE: ${spec.dockerfile} (repo=${spec.repo})`);
+      }
+      assert.ok(exists, `${spec.repo}: ${spec.dockerfile}`);
     }
   });
   it("gives each agent its own image repo", () => {
