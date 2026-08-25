@@ -77,7 +77,7 @@ async function checkGateway(deps: DoctorDeps): Promise<Check> {
 }
 
 function checkKey(deps: DoctorDeps): Check {
-  if (deps.key === "sk_9router") {
+  if (!deps.key || deps.key === "sk_9router") {
     return {
       name: "key",
       status: "warn",
