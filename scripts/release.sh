@@ -51,15 +51,16 @@ VOUT=$(cd "$SMOKE/package" && node bin/9agent.js --version 2>&1)
   || { echo "FAIL: packed CLI reports version '${VOUT}', expected '${VERSION}'"; exit 1; }
 
 # --help only loads the module graph. Drive a real launch far enough to reach
-# discovery and an adapter, against a port nothing listens on, with a throwaway
-# HOME so no cached model list can mask a failure. Deterministic, no gateway.
+# an adapter and produce output, with a throwaway HOME so no cached model
+# list can mask a failure. --print-only skips the gateway fetch entirely,
+# so we verify the adapter's dry-run path instead of an offline error.
 FAKE_HOME=$(mktemp -d)
 DOUT=$(cd "$SMOKE/package" && HOME="$FAKE_HOME" node bin/9agent.js \
   --gateway http://127.0.0.1:59999/v1 -a claude -m x --yes safe --print-only 2>&1 || true)
 rm -rf "$FAKE_HOME"
-grep -q "Is 9Router running?" <<<"$DOUT" \
-  || { echo "FAIL: offline path did not produce its usual error:"; echo "$DOUT"; exit 1; }
-echo "    ok  packed CLI runs, reports ${VERSION}, and fails legibly offline"
+grep -q "dry run" <<<"$DOUT" \
+  || { echo "FAIL: packed CLI did not produce dry-run output:"; echo "$DOUT"; exit 1; }
+echo "    ok  packed CLI runs, reports ${VERSION}, and reaches an adapter"
 
 echo "==> tag"
 # The actual `npm publish` happens in CI (.github/workflows/release.yml),
