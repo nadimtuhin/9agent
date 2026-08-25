@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildAiderArgs } from "../aider.js";
 import { buildClineArgs } from "../cline.js";
 import { buildCodexArgs } from "../codex.js";
+import { buildCommandCodeArgs } from "../commandcode.js";
 import { buildJcodeArgs } from "../jcode.js";
 import { buildKilocodeArgs } from "../kilocode.js";
 import { buildOpenCodeArgs, buildOpenCodeConfig } from "../opencode.js";
@@ -81,7 +82,16 @@ const CASES: ExternalAdapterCase[] = [
     yoloFlag: ["--dangerously-skip-permissions"],
     baseUrlEnv: "OPENAI_BASE_URL",
     apiKeyEnv: "OPENAI_API_KEY",
-    sandbox: false,
+    sandbox: true,
+  },
+  {
+    name: "command-code",
+    aliases: ["cmd"],
+    buildArgs: buildCommandCodeArgs,
+    yoloFlag: ["--yolo"],
+    baseUrlEnv: "ANTHROPIC_BASE_URL",
+    apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
+    sandbox: true,
   },
   {
     name: "opencode",
@@ -184,7 +194,7 @@ describe("external adapter CLI routing", () => {
           const r = runIsolated("-a", c.name, "--sandbox", "--print-only", "--model", "claude-sonnet-5", "--gateway", DEAD);
           assert.equal(r.status, 0, r.stderr);
           const out = r.stdout + r.stderr;
-          assert.match(out, /9agent\/(aider|opencode|cline|kilocode):[0-9a-f]{12}/);
+          assert.match(out, /9agent\/(aider|opencode|cline|kilocode|command-code):[0-9a-f]{12}/);
           assert.match(out, /host\.docker\.internal/);
         });
       }
@@ -203,13 +213,14 @@ describe("external adapter detect", () => {
     const { aiderAdapter } = await import("../aider.js");
     const { codexAdapter } = await import("../codex.js");
     const { clineAdapter } = await import("../cline.js");
+    const { commandCodeAdapter } = await import("../commandcode.js");
     const { jcodeAdapter } = await import("../jcode.js");
     const { kilocodeAdapter } = await import("../kilocode.js");
     const { opencodeAdapter } = await import("../opencode.js");
 
     for (const adapter of [
       aiderAdapter, codexAdapter, clineAdapter,
-      jcodeAdapter, kilocodeAdapter, opencodeAdapter,
+      commandCodeAdapter, jcodeAdapter, kilocodeAdapter, opencodeAdapter,
     ]) {
       const result = await adapter.detect();
       assert.equal(typeof result, "boolean", `${adapter.name} detect() must return boolean`);

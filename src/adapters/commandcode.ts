@@ -64,6 +64,33 @@ export function writeCommandCodeShadow(opts: {
   return shadow;
 }
 
+async function launchSandboxed(
+  opts: LaunchOptions,
+  args: string[],
+): Promise<void> {
+  const spec = commandCodeSpec();
+  const shadow = writeCommandCodeShadow({
+    baseUrl: opts.baseUrl,
+    apiKey: opts.apiKey,
+    model: opts.model,
+  });
+  const mount = `${shadow}:/home/node/.commandcode/providers.json:ro`;
+  const env: Record<string, string> = {
+    NINEROUTER_KEY: opts.apiKey,
+  };
+
+  if (opts.dryRun) {
+    console.error("--- command-code sandbox dry run ---");
+    console.error("image:", resolveImage(spec));
+    console.error("shadow config:", shadow);
+    console.error("gateway:", containerizeUrl(opts.baseUrl), "(key not shown)");
+    console.error("args:", args);
+    return;
+  }
+  console.error(`command-code: launching sandboxed with model=${opts.model}`);
+  await runSandbox(spec, "cmd", args, env, [mount]);
+}
+
 export const commandCodeAdapter: AgentAdapter = {
   name: "command-code",
   aliases: ["cmd"],
@@ -80,27 +107,7 @@ export const commandCodeAdapter: AgentAdapter = {
     const args = buildCommandCodeArgs(opts);
 
     if (opts.sandbox) {
-      const spec = commandCodeSpec();
-      const shadow = writeCommandCodeShadow({
-        baseUrl: opts.baseUrl,
-        apiKey: opts.apiKey,
-        model: opts.model,
-      });
-      const mount = `${shadow}:/home/node/.commandcode/providers.json:ro`;
-      const env: Record<string, string> = {
-        NINEROUTER_KEY: opts.apiKey,
-      };
-
-      if (opts.dryRun) {
-        console.error("--- command-code sandbox dry run ---");
-        console.error("image:", resolveImage(spec));
-        console.error("shadow config:", shadow);
-        console.error("gateway:", containerizeUrl(opts.baseUrl), "(key not shown)");
-        console.error("args:", args);
-        return;
-      }
-      console.error(`command-code: launching sandboxed with model=${opts.model}`);
-      await runSandbox(spec, "cmd", args, env, [mount]);
+      await launchSandboxed(opts, args);
       return;
     }
 

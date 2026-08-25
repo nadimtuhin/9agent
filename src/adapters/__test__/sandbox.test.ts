@@ -24,6 +24,7 @@ import {
   piSpec,
   clineSpec,
   kilocodeSpec,
+  commandCodeSpec,
   buildSandboxArgs,
   containerizeUrl,
   dockerCommand,
@@ -141,7 +142,7 @@ describe("every agent spec", () => {
     // Sandbox is for every agent, so every spec must ship its image recipe.
     for (const spec of [
       claudeSpec(), piSpec(), hermesSpec(), aiderSpec(),
-      opencodeSpec(), clineSpec(), kilocodeSpec(),
+      opencodeSpec(), clineSpec(), kilocodeSpec(), commandCodeSpec(),
     ]) {
       assert.ok(existsSync(spec.dockerfile), spec.dockerfile);
     }
@@ -155,8 +156,9 @@ describe("every agent spec", () => {
       opencodeSpec(),
       clineSpec(),
       kilocodeSpec(),
+      commandCodeSpec(),
     ].map((s) => s.repo);
-    assert.equal(new Set(repos).size, 7);
+    assert.equal(new Set(repos).size, 8);
   });
 });
 
