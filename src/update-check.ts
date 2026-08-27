@@ -27,23 +27,6 @@ async function fetchLatest(
   }
 }
 
-function readCache(): CacheEntry | null {
-  try {
-    return JSON.parse(readFileSync(CACHE_FILE, "utf-8")) as CacheEntry;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(latest: string): void {
-  try {
-    mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(CACHE_FILE, JSON.stringify({ lastCheck: Date.now(), latest }));
-  } catch {
-    void 0;
-  }
-}
-
 export interface UpdateCheckResult {
   current: string;
   latest: string;
@@ -52,9 +35,29 @@ export interface UpdateCheckResult {
 
 export async function checkForUpdate(
   currentVersion: string,
-  opts: { fetcher?: Fetcher; skipCache?: boolean } = {},
+  opts: { fetcher?: Fetcher; skipCache?: boolean; cacheDir?: string } = {},
 ): Promise<UpdateCheckResult> {
-  const cached = readCache();
+  const cacheDir = opts.cacheDir ?? CACHE_DIR;
+  const cacheFile = join(cacheDir, "update-check.json");
+
+  function readLocal(): CacheEntry | null {
+    try {
+      return JSON.parse(readFileSync(cacheFile, "utf-8")) as CacheEntry;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLocal(latest: string): void {
+    try {
+      mkdirSync(cacheDir, { recursive: true });
+      writeFileSync(cacheFile, JSON.stringify({ lastCheck: Date.now(), latest }));
+    } catch {
+      void 0;
+    }
+  }
+
+  const cached = readLocal();
   const cacheFresh =
     cached && Date.now() - cached.lastCheck < CHECK_INTERVAL_MS;
 
@@ -65,7 +68,7 @@ export async function checkForUpdate(
     const fetched = await fetchLatest(opts.fetcher);
     if (fetched) {
       latest = fetched;
-      writeCache(fetched);
+      writeLocal(fetched);
     } else {
       latest = cached?.latest ?? currentVersion;
     }

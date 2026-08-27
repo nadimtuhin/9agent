@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 function fakeFetcher(latestVersion: string, opts?: { ok?: boolean }) {
   return async (_url: string) => ({
@@ -16,33 +19,51 @@ function failingFetcher() {
 
 describe("checkForUpdate", () => {
   it("returns update available when latest is newer", async () => {
-    const { checkForUpdate } = await import("../../update-check.js");
-    const result = await checkForUpdate("1.0.0", {
-      fetcher: fakeFetcher("2.0.0"),
-      skipCache: true,
-    });
-    assert.equal(result.current, "1.0.0");
-    assert.equal(result.latest, "2.0.0");
-    assert.equal(result.updateAvailable, true);
+    const dir = mkdtempSync(join(tmpdir(), "9agent-test-"));
+    try {
+      const { checkForUpdate } = await import("../../update-check.js");
+      const result = await checkForUpdate("1.0.0", {
+        fetcher: fakeFetcher("2.0.0"),
+        skipCache: true,
+        cacheDir: dir,
+      });
+      assert.equal(result.current, "1.0.0");
+      assert.equal(result.latest, "2.0.0");
+      assert.equal(result.updateAvailable, true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("returns no update when versions match", async () => {
-    const { checkForUpdate } = await import("../../update-check.js");
-    const result = await checkForUpdate("1.0.0", {
-      fetcher: fakeFetcher("1.0.0"),
-      skipCache: true,
-    });
-    assert.equal(result.updateAvailable, false);
+    const dir = mkdtempSync(join(tmpdir(), "9agent-test-"));
+    try {
+      const { checkForUpdate } = await import("../../update-check.js");
+      const result = await checkForUpdate("1.0.0", {
+        fetcher: fakeFetcher("1.0.0"),
+        skipCache: true,
+        cacheDir: dir,
+      });
+      assert.equal(result.updateAvailable, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("falls back to current version when fetch fails", async () => {
-    const { checkForUpdate } = await import("../../update-check.js");
-    const result = await checkForUpdate("1.0.0", {
-      fetcher: failingFetcher(),
-      skipCache: true,
-    });
-    assert.equal(result.latest, "1.0.0");
-    assert.equal(result.updateAvailable, false);
+    const dir = mkdtempSync(join(tmpdir(), "9agent-test-"));
+    try {
+      const { checkForUpdate } = await import("../../update-check.js");
+      const result = await checkForUpdate("1.0.0", {
+        fetcher: failingFetcher(),
+        skipCache: true,
+        cacheDir: dir,
+      });
+      assert.equal(result.latest, "1.0.0");
+      assert.equal(result.updateAvailable, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
