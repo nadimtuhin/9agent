@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
-import os from "node:os";
+import * as os from "node:os";
 
 export async function runHost(
   bin: string,

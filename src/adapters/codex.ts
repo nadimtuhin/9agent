@@ -7,13 +7,26 @@ const execFileAsync = promisify(execFile);
 
 export function buildCodexArgs(opts: {
   model: string;
+  baseUrl?: string;
   yolo: boolean;
   extraArgs: string[];
 }): string[] {
+  // codex ignores OPENAI_BASE_URL; a custom model_provider must be registered via -c.
+  const base = opts.baseUrl ?? "http://localhost:20128/v1";
   return [
+    "-c",
+    'model_provider="9router"',
+    "-c",
+    'model_providers.9router.name="9Router"',
+    "-c",
+    `model_providers.9router.base_url="${base}"`,
+    "-c",
+    'model_providers.9router.env_key="OPENAI_API_KEY"',
+    "-c",
+    'model_providers.9router.wire_api="responses"',
     "--model",
     opts.model,
-    ...(opts.yolo ? ["--full-auto"] : []),
+    ...(opts.yolo ? ["--dangerously-bypass-approvals-and-sandbox"] : []),
     ...opts.extraArgs,
   ];
 }
@@ -33,18 +46,21 @@ export const codexAdapter: AgentAdapter = {
     }
   },
   async launch(opts: LaunchOptions) {
-    const args = buildCodexArgs(opts);
+    const args = buildCodexArgs({
+      model: opts.model,
+      baseUrl: opts.baseUrl,
+      yolo: opts.yolo,
+      extraArgs: opts.extraArgs,
+    });
 
     if (opts.dryRun) {
       console.error("--- codex dry run ---");
       console.error("args:", args);
-      console.error("env: OPENAI_BASE_URL=" + opts.baseUrl);
       console.error("env: OPENAI_API_KEY=<redacted>");
       return;
     }
 
     await runHost("codex", args, {
-      OPENAI_BASE_URL: opts.baseUrl,
       OPENAI_API_KEY: opts.apiKey,
     });
   },

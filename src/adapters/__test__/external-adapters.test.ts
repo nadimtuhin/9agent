@@ -31,9 +31,9 @@ function runIsolated(...args: string[]) {
 interface ExternalAdapterCase {
   name: string;
   aliases: string[];
-  buildArgs: (opts: { model: string; yolo: boolean; extraArgs: string[] }) => string[];
+  buildArgs: (opts: { model: string; yolo: boolean; extraArgs: string[]; baseUrl?: string }) => string[];
   yoloFlag: string[];
-  baseUrlEnv: string;
+  baseUrlEnv?: string;
   apiKeyEnv: string;
   sandbox: boolean;
 }
@@ -52,8 +52,7 @@ const CASES: ExternalAdapterCase[] = [
     name: "codex",
     aliases: ["cx"],
     buildArgs: buildCodexArgs,
-    yoloFlag: ["--full-auto"],
-    baseUrlEnv: "OPENAI_BASE_URL",
+    yoloFlag: ["--dangerously-bypass-approvals-and-sandbox"],
     apiKeyEnv: "OPENAI_API_KEY",
     sandbox: false,
   },
@@ -150,6 +149,16 @@ describe("external adapter arg builders", () => {
   it("opencode prefixes model with its provider id", () => {
     const args = buildOpenCodeArgs({ model: "gemini-3.7-flash", yolo: false, extraArgs: [] });
     assert.ok(args.includes("9router/gemini-3.7-flash"));
+  });
+
+  it("codex registers a custom model_provider via -c flags", () => {
+    const args = buildCodexArgs({ model: "gpt-4o-mini", yolo: false, extraArgs: [], baseUrl: "http://gw:20128/v1" });
+    assert.ok(args.includes('-c'));
+    const strArgs = args.join(' ');
+    assert.match(strArgs, /model_provider="9router"/);
+    assert.match(strArgs, /model_providers\.9router\.base_url="http:\/\/gw:20128\/v1"/);
+    assert.match(strArgs, /model_providers\.9router\.env_key="OPENAI_API_KEY"/);
+    assert.match(strArgs, /model_providers\.9router\.wire_api="responses"/);
   });
 
   it("buildOpenCodeConfig declares the gateway as a provider at the URL given", () => {
