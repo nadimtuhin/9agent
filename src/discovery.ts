@@ -24,6 +24,7 @@ export function filterModels(models: ModelEntry[], input: string): ModelEntry[] 
 export interface ResolvedModel {
   model: string;
   warning?: string;
+  contextWindow?: number;
 }
 
 export async function resolveExplicitModel(
@@ -42,7 +43,11 @@ export async function resolveExplicitModel(
     };
   }
   assertModelExists(flag, models.map((m) => m.id));
-  return { model: flag };
+  const entry = models.find((m) => m.id === flag);
+  return {
+    model: flag,
+    ...(entry?.context_window !== undefined ? { contextWindow: entry.context_window } : {}),
+  };
 }
 
 export function isModelEntryArray(x: unknown): x is ModelEntry[] {

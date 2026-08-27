@@ -6,6 +6,7 @@ export interface LaunchOptions {
   extraArgs: string[];
   dryRun?: boolean;
   sandbox?: boolean;
+  contextWindow?: number;
 }
 
 export interface AgentAdapter {

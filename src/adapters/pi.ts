@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
@@ -7,6 +7,36 @@ import { runHost } from "../runner/host.js";
 import { piSpec, resolveImage, runSandbox, writeShadowConfig } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
+
+interface ModelConfig {
+  providers: Record<string, { models: { id: string; contextWindow?: number }[] }>;
+}
+
+export function patchContextConfig(
+  configText: string,
+  modelId: string,
+  contextWindow: number,
+): string {
+  let cfg: ModelConfig;
+  try {
+    cfg = JSON.parse(configText) as ModelConfig;
+  } catch {
+    return configText;
+  }
+
+  let changed = false;
+  for (const provider of Object.values(cfg?.providers ?? {})) {
+    if (!provider.models) continue;
+    const entry = provider.models.find((m) => m.id === modelId);
+    if (entry && entry.contextWindow !== contextWindow) {
+      entry.contextWindow = contextWindow;
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return configText;
+  return JSON.stringify(cfg, null, 2);
+}
 
 export function piKnowsModel(configText: string, model: string): boolean | undefined {
   let ids: string[];
@@ -32,6 +62,21 @@ export function buildPiArgs(opts: {
   return ["--provider", "9router", "--model", opts.model, ...opts.extraArgs];
 }
 
+function syncModelConfig(modelsJson: string, opts: LaunchOptions): void {
+  if (!existsSync(modelsJson)) return;
+  const current = readFileSync(modelsJson, "utf-8");
+  const known = piKnowsModel(current, opts.model);
+  if (known === false) {
+    console.error(
+      `pi: ${opts.model} is not in ${modelsJson} — pi will guess context limits. ` +
+        `Add it there to fix.`,
+    );
+  }
+  if (opts.contextWindow !== undefined && known) {
+    writeFileSync(modelsJson, patchContextConfig(current, opts.model, opts.contextWindow), "utf-8");
+  }
+}
+
 export const piAdapter: AgentAdapter = {
   name: "pi",
   aliases: ["p"],
@@ -46,15 +91,8 @@ export const piAdapter: AgentAdapter = {
   async launch(opts: LaunchOptions) {
     const args = buildPiArgs(opts);
 
-    const modelsJson = join(piSpec().agentHome, "agent", "models.json");
-    if (existsSync(modelsJson)) {
-      const known = piKnowsModel(readFileSync(modelsJson, "utf-8"), opts.model);
-      if (known === false) {
-        console.error(
-          `pi: ${opts.model} is not in ${modelsJson} — pi will guess context limits. ` +
-            `Add it there to fix.`,
-        );
-      }
+    if (!opts.dryRun && !opts.sandbox) {
+      syncModelConfig(join(piSpec().agentHome, "agent", "models.json"), opts);
     }
 
     if (opts.sandbox) {
@@ -92,7 +130,7 @@ export const piAdapter: AgentAdapter = {
     const expected = "http://localhost:20128/v1";
     if (opts.baseUrl !== expected) {
       console.error(
-        `pi: base URL is ${opts.baseUrl} — pi routes via ${modelsJson}, not env vars.`,
+        `pi: base URL is ${opts.baseUrl} — pi routes via models.json, not env vars.`,
       );
     }
 

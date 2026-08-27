@@ -3,16 +3,11 @@ import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import {
-  discoverModels,
-  awaitModels,
-  resolveExplicitModel,
-  filterModels,
-  type ModelEntry,
+  discoverModels, awaitModels, resolveExplicitModel, filterModels, type ModelEntry,
 } from "./discovery.js";
 import { parseYes, resolveKey } from "./opts.js";
-import { runUpdate } from "./update.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
-import { runDoctor, defaultDoctorDeps } from "./doctor.js";
+import { registerCommands } from "./commands.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { aiderAdapter } from "./adapters/aider.js";
 import { claudeAdapter } from "./adapters/claude.js";
@@ -27,83 +22,15 @@ import { piAdapter } from "./adapters/pi.js";
 import type { LaunchOptions } from "./adapters/base.js";
 
 REGISTRY.push(
-  aiderAdapter, claudeAdapter, clineAdapter, codexAdapter,
-  commandCodeAdapter, hermesAdapter, jcodeAdapter, kilocodeAdapter,
-  opencodeAdapter, piAdapter,
+  aiderAdapter, claudeAdapter, clineAdapter, codexAdapter, commandCodeAdapter,
+  hermesAdapter, jcodeAdapter, kilocodeAdapter, opencodeAdapter, piAdapter,
 );
 
 const program = new Command();
 
 const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
 
-program
-  .command("doctor")
-  .description("check the gateway, key, installed agents, and Docker")
-  .option("--gateway <url>", "9Router base URL")
-  .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
-  .option("--json", "machine-readable output for CI")
-  .action(async (opts: { gateway?: string; key?: string; json?: boolean }) => {
-    const root = program.opts<{ gateway?: string; key?: string }>();
-    const gateway =
-      opts.gateway ?? root.gateway ?? process.env.NINEROUTER_URL ?? "http://localhost:20128/v1";
-    const keyFlag = opts.key ?? root.key;
-    const { checks, report, exitCode } = await runDoctor(
-      defaultDoctorDeps({
-        gateway,
-        key: resolveKey(keyFlag),
-        keyFlag,
-      }),
-    );
-    process.stdout.write(
-      opts.json ? JSON.stringify({ ok: exitCode === 0, checks }, null, 2) + "\n" : report,
-    );
-    process.exit(exitCode);
-  });
-
-program
-  .command("models")
-  .description("list the models the gateway serves")
-  .option("--gateway <url>", "9Router base URL")
-  .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
-  .option("--json", "machine-readable output")
-  .action(async (opts: { gateway?: string; key?: string; json?: boolean }) => {
-    const root = program.opts<{ gateway?: string; key?: string }>();
-    const gateway =
-      opts.gateway ?? root.gateway ?? process.env.NINEROUTER_URL ?? "http://localhost:20128/v1";
-    try {
-      const models = await discoverModels(gateway, resolveKey(opts.key ?? root.key));
-      process.stdout.write(
-        opts.json
-          ? JSON.stringify(models, null, 2) + "\n"
-          : models.map((m) => `${m.id}\t${m.owned_by}`).join("\n") + "\n",
-      );
-    } catch (err) {
-      console.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
-    }
-  });
-
-program
-  .command("update")
-  .description("update 9agent to the latest published version")
-  .option("--dry-run", "print the npm command, run nothing")
-  .option("--force", "update even if already on the latest version")
-  .action(async (opts: { dryRun?: boolean; force?: boolean }) => {
-    try {
-      if (!opts.force) {
-        const check = await checkForUpdate(pkg.version, { skipCache: true });
-        if (!check.updateAvailable) {
-          console.log(`Already on the latest version (${pkg.version}).`);
-          return;
-        }
-        console.log(`Updating ${check.current} → ${check.latest}...`);
-      }
-      console.log(await runUpdate({ dryRun: opts.dryRun }));
-    } catch (err) {
-      console.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
-    }
-  });
+registerCommands(program, pkg);
 
 program
   .name("9agent")
@@ -144,15 +71,15 @@ interface ProgramOpts {
 async function resolveModel(
   flag: string | undefined,
   modelsPromise: Promise<ModelEntry[]>,
-): Promise<string> {
+): Promise<{ model: string; contextWindow?: number }> {
   if (flag) {
-    const { model, warning } = await resolveExplicitModel(
+    const { model, warning, contextWindow } = await resolveExplicitModel(
       flag,
       modelsPromise,
       process.stderr,
     );
     if (warning) console.error(warning);
-    return model;
+    return { model, contextWindow };
   }
 
   const models = await awaitModels(modelsPromise, {
@@ -164,7 +91,7 @@ async function resolveModel(
     throw new Error("No TTY — pass --model <id> to pick a model.");
   }
 
-  return search<string>({
+  const id = await search<string>({
     message: "Pick a model:",
     source: (input) =>
       filterModels(models, input ?? "").map((m) => ({
@@ -172,6 +99,8 @@ async function resolveModel(
         value: m.id,
       })),
   });
+  const entry = models.find((m) => m.id === id);
+  return { model: id, contextWindow: entry?.context_window };
 }
 
 async function main(opts: ProgramOpts) {
@@ -195,14 +124,14 @@ async function main(opts: ProgramOpts) {
 
   if (options.sandbox) assertSandboxSupported(adapter);
 
-  const model = options.printOnly && options.model
-    ? options.model
+  const { model, contextWindow } = options.printOnly && options.model
+    ? { model: options.model }
     : await resolveModel(options.model, modelsPromise);
-
   const yolo = await resolveYolo(options);
 
   const launchOpts: LaunchOptions = {
-    model: model,
+    model,
+    contextWindow,
     baseUrl: options.gateway,
     apiKey: options.key,
     yolo,
