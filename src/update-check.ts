@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 const CACHE_DIR = join(homedir(), ".9agent", "update");
-const CACHE_FILE = join(CACHE_DIR, "update-check.json");
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 interface CacheEntry {

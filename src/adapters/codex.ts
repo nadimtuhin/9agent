@@ -11,7 +11,6 @@ export function buildCodexArgs(opts: {
   yolo: boolean;
   extraArgs: string[];
 }): string[] {
-  // codex ignores OPENAI_BASE_URL; a custom model_provider must be registered via -c.
   const base = opts.baseUrl ?? "http://localhost:20128/v1";
   return [
     "-c",
