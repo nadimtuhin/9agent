@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.1 - 2026-08-27
+
+### Fixed
+
+- **Codex adapter ignored custom gateways.** Codex CLI does not read
+  `OPENAI_BASE_URL`; the adapter now registers a custom `model_provider` via
+  `-c` flags pointing at the gateway, with `wire_api="responses"` since codex
+  uses the Responses API.
+- **Codex `--full-auto` flag removed upstream.** Replaced with
+  `--dangerously-bypass-approvals-and-sandbox`.
+- **Update-check cache polluted by tests.** `checkForUpdate()` wrote test
+  fixture versions (e.g. `"1.0.0"`) to the real `~/.9agent/update/` cache,
+  causing false "update available" notices. Tests now use a tmpdir; cache
+  isolated from `.commandcode`.
+- **Pre-existing ESM bug in `host.ts`.** `import os from "node:os"` —
+  `node:os` has no default export; fixed to `import * as os`.
+
 ## 0.4.0 - 2026-08-24
 
 ### Added
