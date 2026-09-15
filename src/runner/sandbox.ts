@@ -73,6 +73,11 @@ export function containerizeConfigText(text: string): string {
   return text.replace(/https?:\/\/[^\s"',}\]>)`<]+/g, (url) => containerizeUrl(url));
 }
 
+export function rewriteAgentPaths(text: string, agentHome: string, containerHome: string): string {
+  const escaped = agentHome.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(escaped, "g"), containerHome);
+}
+
 export function dockerCommand(): string[] {
   const raw = process.env.NINEAGENT_DOCKER_BIN?.trim();
   return raw ? raw.split(/\s+/) : ["docker"];
@@ -86,10 +91,16 @@ export function writeShadowConfig(
   agent: string,
   relativeName: string,
   sourcePath: string,
+  agentHome?: string,
+  containerHome?: string,
 ): string {
   const target = join(shadowConfigDir(agent), relativeName);
   mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-  writeFileSync(target, containerizeConfigText(readFileSync(sourcePath, "utf-8")), {
+  let text = containerizeConfigText(readFileSync(sourcePath, "utf-8"));
+  if (agentHome && containerHome) {
+    text = rewriteAgentPaths(text, agentHome, containerHome);
+  }
+  writeFileSync(target, text, {
     encoding: "utf-8",
     mode: statSync(sourcePath).mode & 0o777,
   });

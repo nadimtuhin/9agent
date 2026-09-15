@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { AgentAdapter, LaunchOptions } from "./base.js";
 import { runHost } from "../runner/host.js";
@@ -10,6 +12,7 @@ import {
   readOnlyPathsIn,
   resolveImage,
   runSandbox,
+  writeShadowConfig,
 } from "../runner/sandbox.js";
 
 const execFileAsync = promisify(execFile);
@@ -97,7 +100,18 @@ export const claudeAdapter: AgentAdapter = {
 
     if (opts.sandbox) {
       console.error(`claude: launching sandboxed with model=${opts.model} yolo=${opts.yolo}`);
-      await runSandbox(claudeSpec(), "claude", args, env);
+      const spec = claudeSpec();
+      const extraMounts: string[] = [];
+      const settingsSrc = join(spec.agentHome, "settings.json");
+      if (existsSync(settingsSrc)) {
+        const shadow = writeShadowConfig("claude", "settings.json", settingsSrc, spec.agentHome, spec.containerHome);
+        spec.hostExecutedPaths = (spec.hostExecutedPaths ?? []).filter((p) => p !== "settings.json");
+        extraMounts.push(`${shadow}:${spec.containerHome}/settings.json:ro`);
+        if (opts.dryRun) {
+          console.error("shadow settings.json:", shadow);
+        }
+      }
+      await runSandbox(spec, "claude", args, env, extraMounts);
       return;
     }
 

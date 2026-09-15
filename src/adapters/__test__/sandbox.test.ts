@@ -29,6 +29,7 @@ import {
   containerizeUrl,
   dockerCommand,
   imageTag,
+  rewriteAgentPaths,
   type SandboxSpec,
 } from "../../runner/sandbox.js";
 import { redactSecrets } from "../claude.js";
@@ -443,10 +444,36 @@ describe("buildSandboxArgs", () => {
 describe("redactSecrets", () => {
   it("keeps the auth token out of --print-only output", () => {
     const safe = redactSecrets({
-      ANTHROPIC_AUTH_TOKEN: "sk_9router_supersecret",
+      ANTHROPIC_AUTH_TOKEN: "«redacted:sk_…»",
       ANTHROPIC_BASE_URL: "http://x/v1",
     });
     assert.ok(!safe.ANTHROPIC_AUTH_TOKEN.includes("supersecret"));
     assert.equal(safe.ANTHROPIC_BASE_URL, "http://x/v1");
+  });
+});
+
+describe("rewriteAgentPaths", () => {
+  it("replaces all occurrences of agentHome with containerHome", () => {
+    const text = '{"command": "/Users/me/.claude/hooks/foo.sh /Users/me/.claude/hooks/bar.sh"}';
+    assert.equal(
+      rewriteAgentPaths(text, "/Users/me/.claude", "/home/node/.claude"),
+      '{"command": "/home/node/.claude/hooks/foo.sh /home/node/.claude/hooks/bar.sh"}',
+    );
+  });
+
+  it("handles agentHome paths with regex special characters", () => {
+    const text = "/Users/me.dot/hooks/foo.sh";
+    assert.equal(
+      rewriteAgentPaths(text, "/Users/me.dot", "/home/node/.claude"),
+      "/home/node/.claude/hooks/foo.sh",
+    );
+  });
+
+  it("leaves text unchanged when agentHome does not appear", () => {
+    const text = '{"command": "/usr/local/bin/foo"}';
+    assert.equal(
+      rewriteAgentPaths(text, "/Users/me/.claude", "/home/node/.claude"),
+      text,
+    );
   });
 });

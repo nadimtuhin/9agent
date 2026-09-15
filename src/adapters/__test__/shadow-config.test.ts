@@ -81,6 +81,20 @@ describe("writeShadowConfig", () => {
       rmSync(shadowConfigDir(agent), { recursive: true, force: true });
     }
   });
+
+  it("rewrites agentHome paths to containerHome when provided", () => {
+    const src = join(tmp(), "settings.json");
+    writeFileSync(src, JSON.stringify({ hooks: { PostToolUse: [{ command: "/Users/me/.claude/hooks/foo.sh" }] } }));
+
+    try {
+      const target = writeShadowConfig(agent, "settings.json", src, "/Users/me/.claude", "/home/node/.claude");
+      const out = readFileSync(target, "utf-8");
+      assert.ok(out.includes("/home/node/.claude/hooks/foo.sh"), "host path replaced");
+      assert.ok(!out.includes("/Users/me/.claude"), "no host path remains");
+    } finally {
+      rmSync(shadowConfigDir(agent), { recursive: true, force: true });
+    }
+  });
 });
 
 describe("readOnlyPathsIn", () => {

@@ -34,7 +34,7 @@ RUN apt-get update \
   && echo 'node ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/node \
   && chmod 0440 /etc/sudoers.d/node
 
-RUN npm install -g @anthropic-ai/claude-code@2.1.233
+RUN npm install -g @anthropic-ai/claude-code@2.1.233 @colbymchenry/codegraph@1.6.0 trace-mcp@3.26.0
 
 USER node
 WORKDIR /workspace

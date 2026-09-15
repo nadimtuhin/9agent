@@ -28,7 +28,7 @@ RUN apt-get update \
 # us skip the wrappers' NPM_CONFIG_PREFIX=/tmp/.npm-global + PATH juggling.
 # Pinned: the image tag is a hash of THIS FILE, so a floating version would mean
 # the cache key never changes while the contents silently do. Bump to upgrade.
-RUN npm install -g @anthropic-ai/claude-code@2.1.233
+RUN npm install -g @anthropic-ai/claude-code@2.1.233 @colbymchenry/codegraph@1.6.0 trace-mcp@3.26.0
 
 USER node
 WORKDIR /workspace
