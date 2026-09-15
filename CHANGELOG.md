@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 - 2026-09-15
+
+### Fixed
+
+- **Claude sandbox hooks fail on host paths.** `~/.claude/settings.json` is now
+  shadowed for sandboxed runs, rewriting host paths to container paths so hook
+  commands resolve correctly.
+- **Missing CLI tools in sandbox image.** Added `@colbymchenry/codegraph@1.6.0`
+  and `trace-mcp@3.26.0` to Docker sandbox images (`claude.Dockerfile`,
+  `claude-root.Dockerfile`).
+
 ## 0.6.1 - 2026-08-27
 
 ### Fixed
