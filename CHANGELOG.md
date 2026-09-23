@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`--key` no longer takes a value.** `9agent --gateway <url> --key` now
+  prompts for the key (masked) and saves it to a per-gateway profile in
+  `~/.config/9agent/config.json` (mode `0600`). Later runs against that
+  gateway use it automatically. Inline keys leaked into shell history and got
+  mangled by shell quoting. `doctor` and `models` read the saved profile.
+
+### Fixed
+
+- **401/403 from the gateway now says the key was rejected** and shows the
+  command to save a new one.
+- **`doctor` checked a remote gateway without sending the key**, so it always
+  reported 401.
+
 ## 0.6.2 - 2026-09-15
 
 ### Fixed

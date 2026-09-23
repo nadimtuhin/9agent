@@ -221,13 +221,13 @@
           <tr><td>--yolo</td><td>Skip permission prompts</td><td>safe</td></tr>
           <tr><td>--yes &lt;mode&gt;</td><td>Non-interactive: <code>safe</code>|<code>dangerous</code></td><td>—</td></tr>
           <tr><td>--gateway &lt;url&gt;</td><td>Gateway base URL</td><td><code>http://localhost:20128/v1</code></td></tr>
-          <tr><td>--key &lt;token&gt;</td><td>Gateway key</td><td><code>sk_9router</code> placeholder</td></tr>
+          <tr><td>--key</td><td>Prompt for this gateway's key and save it to its profile</td><td>—</td></tr>
           <tr><td>--print-only</td><td>Print the resolved env + argv, spawn nothing</td><td>—</td></tr>
           <tr><td>-V, --version</td><td>Print version</td><td>—</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="lede" style="margin-top:18px">The gateway URL comes from <code>--gateway</code>, else <code>NINEROUTER_URL</code>. The key comes from <code>--key</code>, else <code>NINEROUTER_KEY</code>, else <code>LOCAL_9ROUTER_KEY</code>, else the <code>sk_9router</code> placeholder — a local placeholder, not a credential.</p>
+    <p class="lede" style="margin-top:18px">The gateway URL comes from <code>--gateway</code>, else <code>NINEROUTER_URL</code>. The key comes from the profile saved for that gateway with <code>--key</code> (in <code>~/.config/9agent/config.json</code>), else <code>NINEROUTER_KEY</code>, else <code>LOCAL_9ROUTER_KEY</code>, else the <code>sk_9router</code> placeholder — a local placeholder, not a credential.</p>
   </section>
 
   <section id="agents">

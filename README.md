@@ -41,13 +41,24 @@ No gateway? You get `Is 9Router running?` and exit 1 — never a hang.
 | `--yolo` | Skip permission prompts | safe |
 | `--yes <mode>` | Non-interactive: `safe`\|`dangerous` | — |
 | `--gateway <url>` | Gateway base URL | `http://localhost:20128/v1` |
-| `--key <token>` | Gateway key. `sk_9router` is a local placeholder, not a credential | see below |
+| `--key` | Prompt for this gateway's key and save it to its profile | see below |
 | `--print-only` | Print the resolved env + argv, spawn nothing | — |
 | `-V, --version` | Print version | — |
 
 The gateway URL comes from `--gateway`, else `NINEROUTER_URL`. The key comes
-from `--key`, else `NINEROUTER_KEY`, else `LOCAL_9ROUTER_KEY`, else the
-`sk_9router` placeholder. `LOCAL_9ROUTER_KEY` exists because a sandboxed agent
+from the profile saved for that gateway, else `NINEROUTER_KEY`, else
+`LOCAL_9ROUTER_KEY`, else the `sk_9router` placeholder (a local placeholder,
+not a credential).
+
+Save a key once, at a masked prompt, rather than typing it inline where it
+lands in shell history:
+
+```bash
+9agent --gateway https://router.example.com/v1 --key
+```
+
+Profiles live in `~/.config/9agent/config.json` (mode `0600`), one key per
+gateway URL. `LOCAL_9ROUTER_KEY` exists because a sandboxed agent
 reaches the gateway as a remote client, where the placeholder is rejected and a
 real key is required.
 
