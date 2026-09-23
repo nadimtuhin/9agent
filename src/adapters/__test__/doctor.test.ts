@@ -52,6 +52,29 @@ describe("runDoctor", () => {
     assert.equal(r.checks.find((c) => c.name === "gateway")?.status, "fail");
   });
 
+  it("sends the resolved key to the gateway", async () => {
+    let auth: string | undefined;
+    await runDoctor(
+      deps({
+        key: "sk-real",
+        fetchFn: (_url, init) => {
+          auth = new Headers(init?.headers).get("Authorization") ?? undefined;
+          return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+        },
+      }),
+    );
+    assert.equal(auth, "Bearer sk-real");
+  });
+
+  it("says the key was rejected on 401/403, and how to save another", async () => {
+    const r = await runDoctor(
+      deps({ fetchFn: () => Promise.resolve(new Response("nope", { status: 403 })) }),
+    );
+    const detail = r.checks.find((c) => c.name === "gateway")?.detail ?? "";
+    assert.match(detail, /rejected the key/);
+    assert.match(detail, /--key/);
+  });
+
   it("fails on a non-2xx gateway response", async () => {
     const r = await runDoctor(
       deps({ fetchFn: () => Promise.resolve(new Response("nope", { status: 401 })) }),

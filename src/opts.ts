@@ -4,9 +4,9 @@ export function parseYes(mode: string): boolean {
   throw new Error(`--yes must be 'safe' or 'dangerous', got '${mode}'`);
 }
 
-export function resolveKey(flag?: string): string {
+export function resolveKey(saved?: string): string {
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty strings should be treated as unset
-  return flag || process.env.NINEROUTER_KEY || process.env.LOCAL_9ROUTER_KEY || "sk_9router";
+  return saved || process.env.NINEROUTER_KEY || process.env.LOCAL_9ROUTER_KEY || "sk_9router";
 }
 
 export function assertModelExists(model: string, ids: readonly string[]): void {

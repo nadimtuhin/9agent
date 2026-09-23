@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { select, search } from "@inquirer/prompts";
+import { password, select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import {
@@ -8,6 +8,7 @@ import {
 import { parseYes, resolveKey } from "./opts.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { registerCommands } from "./commands.js";
+import { saveKey, savedKey } from "./profiles.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { aiderAdapter } from "./adapters/aider.js";
 import { claudeAdapter } from "./adapters/claude.js";
@@ -40,7 +41,7 @@ program
   .option("-m, --model <id>", "model ID (skip picker)")
   .option("--yolo", "skip permissions / dangerous mode")
   .option("--gateway <url>", "9Router base URL", process.env.NINEROUTER_URL ?? "http://localhost:20128/v1")
-  .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
+  .option("--key", "prompt for this gateway's key and save it to its profile")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
   .option("--sandbox", "run the agent in a Docker container")
@@ -60,7 +61,7 @@ interface ProgramOpts {
   model?: string;
   yolo: boolean;
   gateway: string;
-  key?: string;
+  key?: boolean;
   yes?: string;
   printOnly: boolean;
   sandbox: boolean;
@@ -108,9 +109,9 @@ async function main(opts: ProgramOpts) {
     checkForUpdate(pkg.version).then(printUpdateNotice).catch(() => void 0);
   }
 
-  const options: ProgramOpts & { key: string } = {
+  const options: Omit<ProgramOpts, "key"> & { key: string } = {
     ...opts,
-    key: resolveKey(opts.key),
+    key: resolveKey(savedKey(opts.gateway)),
     yolo: opts.yolo ?? false,
     printOnly: opts.printOnly ?? false,
     sandbox: opts.sandbox ?? false,
@@ -184,7 +185,7 @@ async function resolveAdapter(agentName?: string) {
   return adapter;
 }
 
-async function resolveYolo(opts: ProgramOpts & { key: string }) {
+async function resolveYolo(opts: Omit<ProgramOpts, "key"> & { key: string }) {
   if (opts.yolo && opts.yes === "safe") {
     throw new Error("--yolo and --yes safe contradict each other; pass one.");
   }
@@ -203,4 +204,45 @@ async function resolveYolo(opts: ProgramOpts & { key: string }) {
   return false;
 }
 
-program.parse();
+function inlineKeyError(gateway: string): Error {
+  return new Error(
+    "--key no longer takes a value: inline keys land in shell history and get mangled by shell quoting.\n" +
+      `Run \`9agent --gateway ${gateway} --key\` and paste the key at the prompt.`,
+  );
+}
+
+function isSubcommand(word: string): boolean {
+  return word === "help" || program.commands.some((c) => c.name() === word || c.aliases().includes(word));
+}
+
+async function promptForKey() {
+  const { gateway, key } = program.opts<{ gateway: string; key?: boolean }>();
+  if (!key) return;
+  const next = process.argv[process.argv.indexOf("--key") + 1];
+  if (next !== undefined && !next.startsWith("-") && !isSubcommand(next)) {
+    throw inlineKeyError(gateway);
+  }
+  if (!process.stdin.isTTY) {
+    throw new Error("--key needs a terminal to prompt. For non-interactive runs set NINEROUTER_KEY.");
+  }
+  const entered = (await password({ message: `Key for ${gateway}:`, mask: "*" })).trim();
+  if (!entered) throw new Error("No key entered; nothing saved.");
+  saveKey(gateway, entered);
+  console.error(`9agent: saved key for ${gateway}.`);
+}
+
+program.hook("preAction", async () => {
+  try {
+    await promptForKey();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+
+if (process.argv.some((a) => a.startsWith("--key="))) {
+  console.error(inlineKeyError("<url>").message);
+  process.exit(1);
+}
+
+await program.parseAsync();

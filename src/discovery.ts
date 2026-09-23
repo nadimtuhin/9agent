@@ -130,6 +130,16 @@ export async function awaitModels(
   }
 }
 
+function httpError(baseUrl: string, status: number): Error {
+  if (status === 401 || status === 403) {
+    return new Error(
+      `${baseUrl}/models returned HTTP ${status}: the gateway rejected the key.\n` +
+        `Save the right one with: 9agent --gateway ${baseUrl} --key`,
+    );
+  }
+  return new Error(`${baseUrl}/models returned HTTP ${status}`);
+}
+
 export async function discoverModels(
   baseUrl: string,
   apiKey: string,
@@ -152,7 +162,7 @@ export async function discoverModels(
     const cached = serveFromCache(cachePath, `9agent: ${baseUrl}/models returned HTTP ${res.status}`);
     if (cached) return cached;
   }
-  if (!res.ok) throw new Error(`${baseUrl}/models returned HTTP ${res.status}`);
+  if (!res.ok) throw httpError(baseUrl, res.status);
 
   let body: unknown;
   try {

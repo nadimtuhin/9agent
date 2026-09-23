@@ -32,6 +32,14 @@ function run(...args: string[]) {
  *  cannot answer for the gateway. Without this, a warm cache on the dev box
  *  turns "gateway unreachable" into a cache hit and the test result depends on
  *  whether 9agent happened to run recently. Mirrors release.sh's FAKE_HOME. */
+function runWithKey(...args: string[]) {
+  return spawnSync(process.execPath, ["--import", "tsx", CLI, ...args], {
+    encoding: "utf-8",
+    timeout: 10_000,
+    env: { ...process.env, NINEROUTER_KEY: "sk-must-not-appear" },
+  });
+}
+
 function runIsolated(...args: string[]) {
   const home = mkdtempSync(join(tmpdir(), "9agent-test-"));
   try {
@@ -93,9 +101,9 @@ describe("doctor subcommand routing", () => {
   });
 
   it("never prints the key, only which source it came from", () => {
-    const r = run("doctor", "--gateway", DEAD, "--key", "sk-must-not-appear");
+    const r = runWithKey("doctor", "--gateway", DEAD);
     assert.doesNotMatch(r.stdout + r.stderr, /sk-must-not-appear/);
-    // The report names the source (an env var, or --key) and withholds the
+    // The report names the source (an env var, or saved profile) and withholds the
     // value. Which source wins depends on the environment, so assert the shape.
     assert.match(r.stdout, /resolved from .+ \(value not shown\)|local placeholder/);
   });
@@ -122,8 +130,39 @@ describe("doctor --json", () => {
   });
 
   it("withholds the key value in JSON too", () => {
-    const r = run("doctor", "--gateway", DEAD, "--json", "--key", "sk-must-not-appear");
+    const r = runWithKey("doctor", "--gateway", DEAD, "--json");
     assert.doesNotMatch(r.stdout + r.stderr, /sk-must-not-appear/);
+  });
+});
+
+describe("--key", () => {
+  it("refuses an inline value instead of forwarding it to the agent", () => {
+    // Commander would otherwise hand a bare "--key token" to [args...], and the
+    // key would reach the agent's argv.
+    const r = runIsolated("--key", "sk-inline", "-a", "claude", "--print-only", "-m", "x");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /no longer takes a value/);
+    assert.doesNotMatch(r.stdout, /sk-inline/);
+  });
+
+  it("refuses --key=value without echoing the value", () => {
+    // Commander's own "unknown option '--key=…'" error would print the token.
+    const r = runIsolated("--key=sk-inline", "-a", "claude", "--print-only", "-m", "x");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /no longer takes a value/);
+    assert.doesNotMatch(r.stdout + r.stderr, /sk-inline/);
+  });
+
+  it("treats a following subcommand name as a subcommand, not a key", () => {
+    // `help` is added lazily by commander, so it is not in program.commands.
+    const r = runIsolated("--key", "help");
+    assert.doesNotMatch(r.stderr, /no longer takes a value/);
+  });
+
+  it("will not prompt without a terminal", () => {
+    const r = runIsolated("--key", "-a", "claude", "--print-only", "-m", "x");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /needs a terminal/);
   });
 });
 

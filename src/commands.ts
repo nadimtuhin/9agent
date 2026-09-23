@@ -2,6 +2,7 @@ import { Command } from "commander";
 import process from "node:process";
 import { discoverModels } from "./discovery.js";
 import { resolveKey } from "./opts.js";
+import { savedKey } from "./profiles.js";
 import { runUpdate } from "./update.js";
 import { checkForUpdate } from "./update-check.js";
 import { runDoctor, defaultDoctorDeps } from "./doctor.js";
@@ -15,14 +16,19 @@ function registerDoctor(program: Command): void {
     .command("doctor")
     .description("check the gateway, key, installed agents, and Docker")
     .option("--gateway <url>", "9Router base URL")
-    .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
     .option("--json", "machine-readable output for CI")
-    .action(async (opts: { gateway?: string; key?: string; json?: boolean }) => {
-      const root = program.opts<{ gateway?: string; key?: string }>();
+    .action(async (opts: { gateway?: string; json?: boolean }) => {
+      const root = program.opts<{ gateway?: string }>();
       const gateway = effectiveGateway(opts, root);
-      const keyFlag = opts.key ?? root.key;
+      let saved: string | undefined;
+      try {
+        saved = savedKey(gateway);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
       const { checks, report, exitCode } = await runDoctor(
-        defaultDoctorDeps({ gateway, key: resolveKey(keyFlag), keyFlag }),
+        defaultDoctorDeps({ gateway, key: resolveKey(saved), saved }),
       );
       process.stdout.write(opts.json ? JSON.stringify({ ok: exitCode === 0, checks }, null, 2) + "\n" : report);
       process.exit(exitCode);
@@ -34,13 +40,12 @@ function registerModels(program: Command): void {
     .command("models")
     .description("list the models the gateway serves")
     .option("--gateway <url>", "9Router base URL")
-    .option("--key <token>", "9Router API key [env: NINEROUTER_KEY, LOCAL_9ROUTER_KEY]")
     .option("--json", "machine-readable output")
-    .action(async (opts: { gateway?: string; key?: string; json?: boolean }) => {
-      const root = program.opts<{ gateway?: string; key?: string }>();
+    .action(async (opts: { gateway?: string; json?: boolean }) => {
+      const root = program.opts<{ gateway?: string }>();
       const gateway = effectiveGateway(opts, root);
       try {
-        const models = await discoverModels(gateway, resolveKey(opts.key ?? root.key));
+        const models = await discoverModels(gateway, resolveKey(savedKey(gateway)));
         const out = opts.json
           ? JSON.stringify(models, null, 2) + "\n"
           : models.map((m) => `${m.id}\t${m.owned_by}`).join("\n") + "\n";

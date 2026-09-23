@@ -43,8 +43,8 @@ const execExec: DoctorExec = (cmd, args) =>
     });
   });
 
-export function resolveKeySource(flag?: string): string {
-  if (flag) return "--key";
+export function resolveKeySource(saved?: string): string {
+  if (saved) return "saved profile";
   if (process.env.NINEROUTER_KEY) return "NINEROUTER_KEY";
   if (process.env.LOCAL_9ROUTER_KEY) return "LOCAL_9ROUTER_KEY";
   return "default";
@@ -54,10 +54,14 @@ async function checkGateway(deps: DoctorDeps): Promise<Check> {
   const url = `${deps.gateway}/models`;
   let res: Response;
   try {
-    res = await deps.fetchFn(url);
+    res = await deps.fetchFn(url, deps.key ? { headers: { Authorization: `Bearer ${deps.key}` } } : undefined);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { name: "gateway", status: "fail", detail: `${url} unreachable (${msg})` };
+  }
+  if (res.status === 401 || res.status === 403) {
+    const detail = `${url} returned HTTP ${res.status}: the gateway rejected the key. Save the right one with: 9agent --gateway ${deps.gateway} --key`;
+    return { name: "gateway", status: "fail", detail };
   }
   if (!res.ok) {
     return { name: "gateway", status: "fail", detail: `${url} returned HTTP ${res.status}` };
@@ -129,10 +133,10 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   return { checks, report, exitCode: checks.some((c) => c.status === "fail") ? 1 : 0 };
 }
 
-export function defaultDoctorDeps(opts: { gateway: string; key: string; keyFlag?: string }): DoctorDeps {
+export function defaultDoctorDeps(opts: { gateway: string; key: string; saved?: string }): DoctorDeps {
   return {
     gateway: opts.gateway,
-    keySource: resolveKeySource(opts.keyFlag),
+    keySource: resolveKeySource(opts.saved),
     key: opts.key,
     adapters: REGISTRY,
     fetchFn: fetch,

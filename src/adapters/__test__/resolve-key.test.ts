@@ -7,9 +7,9 @@ afterEach(() => {
   process.env = { ...saved };
 });
 
-test("an explicit --key wins over both env vars", () => {
+test("a key saved for the gateway wins over both env vars", () => {
   process.env.NINEROUTER_KEY = "from-env";
-  assert.equal(resolveKey("from-flag"), "from-flag");
+  assert.equal(resolveKey("from-profile"), "from-profile");
 });
 
 test("NINEROUTER_KEY wins over LOCAL_9ROUTER_KEY", () => {
