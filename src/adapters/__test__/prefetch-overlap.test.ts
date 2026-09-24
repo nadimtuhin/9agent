@@ -112,7 +112,7 @@ describe("model prefetch overlaps the agent picker", () => {
       // And the in-flight fetch resolves into the model picker.
       await sleep(1400);
       const models = tmux("capture-pane", "-p", "-t", session);
-      assert.match(models, /Pick a model:/, models);
+      assert.match(models, /Pick models/, models);
       assert.match(models, /slow\/model/, models);
     } finally {
       spawnSync("tmux", ["kill-session", "-t", session], { timeout: 10_000 });

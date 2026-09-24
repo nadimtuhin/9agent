@@ -1,5 +1,6 @@
 export interface LaunchOptions {
   model: string;
+  models?: string[];
   baseUrl: string;
   apiKey: string;
   yolo: boolean;

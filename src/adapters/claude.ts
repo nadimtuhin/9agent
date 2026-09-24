@@ -31,16 +31,22 @@ export interface ClaudeEnvOpts {
   apiKey: string;
 }
 
-export function buildClaudeEnv(opts: ClaudeEnvOpts): Record<string, string> {
-  return {
+export function buildClaudeEnv(opts: ClaudeEnvOpts & { models?: string[] }): Record<string, string> {
+  const models = opts.models ?? [opts.model];
+  const env: Record<string, string> = {
     ANTHROPIC_BASE_URL: opts.baseUrl,
     ANTHROPIC_AUTH_TOKEN: opts.apiKey,
-    ANTHROPIC_DEFAULT_OPUS_MODEL: opts.model,
-    ANTHROPIC_DEFAULT_SONNET_MODEL: opts.model,
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: opts.model,
     CLAUDE_CODE_SUBAGENT_MODEL: opts.model,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
   };
+  const tiers = ["OPUS", "SONNET", "HAIKU"] as const;
+  models.slice(0, 3).forEach((m, i) => {
+    env[`ANTHROPIC_DEFAULT_${tiers[i]}_MODEL`] = m;
+  });
+  for (let i = models.length; i < 3; i++) {
+    env[`ANTHROPIC_DEFAULT_${tiers[i]}_MODEL`] = opts.model;
+  }
+  return env;
 }
 
 export interface ClaudeArgsOpts {

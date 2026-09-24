@@ -1,14 +1,14 @@
 import { Command } from "commander";
-import { password, select, search } from "@inquirer/prompts";
+import { checkbox, password, select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import {
   discoverModels, awaitModels, resolveExplicitModel, filterModels, type ModelEntry,
 } from "./discovery.js";
-import { parseYes, resolveKey } from "./opts.js";
+import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { registerCommands } from "./commands.js";
-import { saveKey, savedKey } from "./profiles.js";
+import { saveKey, savedKey, getLastGateway, setLastGateway, getLastModels, setLastModels } from "./profiles.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { aiderAdapter } from "./adapters/aider.js";
 import { claudeAdapter } from "./adapters/claude.js";
@@ -38,9 +38,9 @@ program
   .description("Universal 9Router agent launcher")
   .version(pkg.version)
   .option("-a, --agent <name>", "agent name or alias")
-  .option("-m, --model <id>", "model ID (skip picker)")
+  .option("-m, --model <ids>", "model ID(s), comma-separated (skip picker)")
   .option("--yolo", "skip permissions / dangerous mode")
-  .option("--gateway <url>", "9Router base URL", process.env.NINEROUTER_URL ?? "http://localhost:20128/v1")
+  .option("--gateway <url>", "9Router base URL")
   .option("--key", "prompt for this gateway's key and save it to its profile")
   .option("--yes <mode>", "non-interactive: 'safe' or 'dangerous'")
   .option("--print-only", "print resolved env+args, don't spawn")
@@ -59,6 +59,7 @@ program
 interface ProgramOpts {
   agent?: string;
   model?: string;
+  models?: string[];
   yolo: boolean;
   gateway: string;
   key?: boolean;
@@ -69,18 +70,16 @@ interface ProgramOpts {
   args: string[];
 }
 
-async function resolveModel(
+async function resolveModels(
   flag: string | undefined,
   modelsPromise: Promise<ModelEntry[]>,
-): Promise<{ model: string; contextWindow?: number }> {
+): Promise<{ models: string[]; contextWindow?: number }> {
   if (flag) {
-    const { model, warning, contextWindow } = await resolveExplicitModel(
-      flag,
-      modelsPromise,
-      process.stderr,
-    );
-    if (warning) console.error(warning);
-    return { model, contextWindow };
+    const ids = flag.split(",").map((s) => s.trim()).filter(Boolean);
+    const models = await awaitModels(modelsPromise, { stream: process.stderr, isTTY: false });
+    for (const id of ids) assertModelExists(id, models.map((m) => m.id));
+    const entry = models.find((m) => m.id === ids[0]);
+    return { models: ids, contextWindow: entry?.context_window };
   }
 
   const models = await awaitModels(modelsPromise, {
@@ -89,19 +88,29 @@ async function resolveModel(
   });
 
   if (!process.stdin.isTTY) {
-    throw new Error("No TTY — pass --model <id> to pick a model.");
+    throw new Error("No TTY — pass --model <ids> to pick models.");
   }
 
-  const id = await search<string>({
-    message: "Pick a model:",
-    source: (input) =>
-      filterModels(models, input ?? "").map((m) => ({
-        name: `${m.id} — ${m.owned_by}`,
-        value: m.id,
-      })),
+  const last = getLastModels() ?? [];
+  const choices = models.map((m) => ({
+    name: `${m.id} — ${m.owned_by}`,
+    value: m.id,
+    checked: last.includes(m.id),
+  }));
+
+  if (choices.every((c) => !c.checked) && last.length > 0 && choices.length > 0) {
+    choices[0].checked = true;
+  }
+
+  const picked = await checkbox<string>({
+    message: "Pick models (space to select, enter to confirm):",
+    choices,
+    validate: (sel) => sel.length > 0 || "Pick at least one model.",
   });
-  const entry = models.find((m) => m.id === id);
-  return { model: id, contextWindow: entry?.context_window };
+
+  setLastModels(picked);
+  const entry = models.find((m) => m.id === picked[0]);
+  return { models: picked, contextWindow: entry?.context_window };
 }
 
 async function main(opts: ProgramOpts) {
@@ -109,9 +118,13 @@ async function main(opts: ProgramOpts) {
     checkForUpdate(pkg.version).then(printUpdateNotice).catch(() => void 0);
   }
 
+  const gateway = opts.gateway ?? process.env.NINEROUTER_URL ?? getLastGateway() ?? "http://localhost:20128/v1";
+  setLastGateway(gateway);
+
   const options: Omit<ProgramOpts, "key"> & { key: string } = {
     ...opts,
-    key: resolveKey(savedKey(opts.gateway)),
+    gateway,
+    key: resolveKey(savedKey(gateway)),
     yolo: opts.yolo ?? false,
     printOnly: opts.printOnly ?? false,
     sandbox: opts.sandbox ?? false,
@@ -125,13 +138,14 @@ async function main(opts: ProgramOpts) {
 
   if (options.sandbox) assertSandboxSupported(adapter);
 
-  const { model, contextWindow } = options.printOnly && options.model
-    ? { model: options.model }
-    : await resolveModel(options.model, modelsPromise);
+  const { models, contextWindow } = options.printOnly && options.model
+    ? { models: options.model.split(",").map(s => s.trim()).filter(Boolean) }
+    : await resolveModels(options.model, modelsPromise);
   const yolo = await resolveYolo(options);
 
   const launchOpts: LaunchOptions = {
-    model,
+    model: models[0],
+    models,
     contextWindow,
     baseUrl: options.gateway,
     apiKey: options.key,
@@ -216,8 +230,9 @@ function isSubcommand(word: string): boolean {
 }
 
 async function promptForKey() {
-  const { gateway, key } = program.opts<{ gateway: string; key?: boolean }>();
+  const { key } = program.opts<{ key?: boolean }>();
   if (!key) return;
+  const gateway = program.opts<{ gateway?: string }>().gateway ?? process.env.NINEROUTER_URL ?? getLastGateway() ?? "http://localhost:20128/v1";
   const next = process.argv[process.argv.indexOf("--key") + 1];
   if (next !== undefined && !next.startsWith("-") && !isSubcommand(next)) {
     throw inlineKeyError(gateway);
