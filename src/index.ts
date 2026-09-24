@@ -1,10 +1,8 @@
 import { Command } from "commander";
-import { checkbox, password, select, search } from "@inquirer/prompts";
+import { checkbox, password, select } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
-import {
-  discoverModels, awaitModels, resolveExplicitModel, filterModels, type ModelEntry,
-} from "./discovery.js";
+import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
 import { assertModelExists, parseYes, resolveKey } from "./opts.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { registerCommands } from "./commands.js";
