@@ -17,3 +17,8 @@ export function assertModelExists(model: string, ids: readonly string[]): void {
     : `\nRun 9agent without --model to pick from the ${ids.length} available.`;
   throw new Error(`Model '${model}' is not served by this gateway.${hint}`);
 }
+
+export function resolveModelFuzzy(flag: string, ids: readonly string[]): string | null {
+  const matches = ids.filter((id) => id.includes(flag) || flag.includes(id));
+  return matches.length === 1 ? matches[0] : null;
+}

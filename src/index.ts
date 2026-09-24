@@ -3,9 +3,10 @@ import { checkbox, password, select } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
-import { assertModelExists, parseYes, resolveKey } from "./opts.js";
+import { assertModelExists, parseYes, resolveKey, resolveModelFuzzy } from "./opts.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { registerCommands } from "./commands.js";
+import { registerGatewayCommands } from "./gateway.js";
 import { saveKey, savedKey, getLastGateway, setLastGateway, getLastModels, setLastModels } from "./profiles.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
 import { aiderAdapter } from "./adapters/aider.js";
@@ -30,6 +31,7 @@ const program = new Command();
 const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
 
 registerCommands(program, pkg);
+registerGatewayCommands(program);
 
 program
   .name("9agent")
@@ -71,11 +73,22 @@ interface ProgramOpts {
 async function resolveModels(
   flag: string | undefined,
   modelsPromise: Promise<ModelEntry[]>,
+  gateway: string,
 ): Promise<{ models: string[]; contextWindow?: number }> {
   if (flag) {
     const ids = flag.split(",").map((s) => s.trim()).filter(Boolean);
     const models = await awaitModels(modelsPromise, { stream: process.stderr, isTTY: false });
-    for (const id of ids) assertModelExists(id, models.map((m) => m.id));
+    const allIds = models.map((m) => m.id);
+    for (const id of ids) {
+      if (allIds.includes(id)) continue;
+      const fuzzy = resolveModelFuzzy(id, allIds);
+      if (fuzzy) {
+        console.error(`9agent: '${id}' resolved to '${fuzzy}'`);
+        ids[ids.indexOf(id)] = fuzzy;
+      } else {
+        assertModelExists(id, allIds);
+      }
+    }
     const entry = models.find((m) => m.id === ids[0]);
     return { models: ids, contextWindow: entry?.context_window };
   }
@@ -89,7 +102,7 @@ async function resolveModels(
     throw new Error("No TTY — pass --model <ids> to pick models.");
   }
 
-  const last = getLastModels() ?? [];
+  const last = getLastModels(gateway) ?? [];
   const choices = models.map((m) => ({
     name: `${m.id} — ${m.owned_by}`,
     value: m.id,
@@ -106,7 +119,7 @@ async function resolveModels(
     validate: (sel) => sel.length > 0 || "Pick at least one model.",
   });
 
-  setLastModels(picked);
+  setLastModels(gateway, picked);
   const entry = models.find((m) => m.id === picked[0]);
   return { models: picked, contextWindow: entry?.context_window };
 }
@@ -138,7 +151,7 @@ async function main(opts: ProgramOpts) {
 
   const { models, contextWindow } = options.printOnly && options.model
     ? { models: options.model.split(",").map(s => s.trim()).filter(Boolean) }
-    : await resolveModels(options.model, modelsPromise);
+    : await resolveModels(options.model, modelsPromise, options.gateway);
   const yolo = await resolveYolo(options);
 
   const launchOpts: LaunchOptions = {
