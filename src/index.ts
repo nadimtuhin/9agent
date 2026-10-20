@@ -1,8 +1,8 @@
 import { Command } from "commander";
-import { checkbox, password, select } from "@inquirer/prompts";
+import { password, select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
-import { discoverModels, awaitModels, type ModelEntry } from "./discovery.js";
+import { discoverModels, awaitModels, filterModels, type ModelEntry } from "./discovery.js";
 import { assertModelExists, parseYes, resolveKey, resolveModelFuzzy } from "./opts.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { registerCommands } from "./commands.js";
@@ -103,25 +103,30 @@ async function resolveModels(
   }
 
   const last = getLastModels(gateway) ?? [];
-  const choices = models.map((m) => ({
-    name: `${m.id} — ${m.owned_by}`,
-    value: m.id,
-    checked: last.includes(m.id),
-  }));
-
-  if (choices.every((c) => !c.checked) && last.length > 0 && choices.length > 0) {
-    choices[0].checked = true;
+  const sorted = [...models];
+  if (last.length > 0) {
+    sorted.sort((a, b) => {
+      const aIdx = last.indexOf(a.id);
+      const bIdx = last.indexOf(b.id);
+      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+      if (aIdx !== -1) return -1;
+      if (bIdx !== -1) return 1;
+      return 0;
+    });
   }
 
-  const picked = await checkbox<string>({
-    message: "Pick models (space to select, enter to confirm):",
-    choices,
-    validate: (sel) => sel.length > 0 || "Pick at least one model.",
+  const picked = await search<string>({
+    message: "Pick a model:",
+    source: (input) =>
+      filterModels(sorted, input ?? "").map((m) => ({
+        name: `${m.id} — ${m.owned_by}`,
+        value: m.id,
+      })),
   });
 
-  setLastModels(gateway, picked);
-  const entry = models.find((m) => m.id === picked[0]);
-  return { models: picked, contextWindow: entry?.context_window };
+  setLastModels(gateway, [picked]);
+  const entry = models.find((m) => m.id === picked);
+  return { models: [picked], contextWindow: entry?.context_window };
 }
 
 async function main(opts: ProgramOpts) {
