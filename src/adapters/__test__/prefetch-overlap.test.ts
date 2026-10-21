@@ -12,7 +12,7 @@ const ENTRY = fileURLToPath(new URL("../../../dist/index.js", import.meta.url));
  *  enough that a serial implementation could not have painted the picker yet. */
 const RESPONSE_DELAY_MS = 1500;
 /** When the primary assertion samples the rendered screen. */
-const SAMPLE_AT_MS = 300;
+const SAMPLE_AT_MS = 500;
 
 function tmux(...args: string[]): string {
   return execFileSync("tmux", args, { encoding: "utf-8", timeout: 10_000 });

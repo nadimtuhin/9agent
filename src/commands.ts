@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import process from "node:process";
-import { discoverModels } from "./discovery.js";
+import { discoverModels, filterModels } from "./discovery.js";
 import { resolveKey } from "./opts.js";
 import { savedKey } from "./profiles.js";
 import { runUpdate } from "./update.js";
@@ -37,15 +37,18 @@ function registerDoctor(program: Command): void {
 
 function registerModels(program: Command): void {
   program
-    .command("models")
-    .description("list the models the gateway serves")
+    .command("models [pattern]")
+    .description("list the models the gateway serves (optionally filter by pattern)")
     .option("--gateway <url>", "9Router base URL")
     .option("--json", "machine-readable output")
-    .action(async (opts: { gateway?: string; json?: boolean }) => {
+    .action(async (pattern: string | undefined, opts: { gateway?: string; json?: boolean }) => {
       const root = program.opts<{ gateway?: string }>();
       const gateway = effectiveGateway(opts, root);
       try {
-        const models = await discoverModels(gateway, resolveKey(savedKey(gateway)));
+        let models = await discoverModels(gateway, resolveKey(savedKey(gateway)));
+        if (pattern) {
+          models = filterModels(models, pattern);
+        }
         const out = opts.json
           ? JSON.stringify(models, null, 2) + "\n"
           : models.map((m) => `${m.id}\t${m.owned_by}`).join("\n") + "\n";

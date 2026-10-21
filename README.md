@@ -37,6 +37,7 @@ No gateway? You get `Is 9Router running?` and exit 1 — never a hang.
 |------|-------------|---------|
 | `-a, --agent <name>` | `claude`\|`pi`\|`hermes`, or alias `c`/`cc`/`p`/`h` | picker |
 | `-m, --model <id>` | Model id | searchable picker |
+| `-l, --last` | Launch with last-used agent, model, and gateway | — |
 | `--sandbox` | Run the agent in Docker | host |
 | `--yolo` | Skip permission prompts | safe |
 | `--yes <mode>` | Non-interactive: `safe`\|`dangerous` | — |

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.10.0 - 2026-10-21
+
+### Added
+
+- **`-l, --last` flag for instant launch.** Skips all interactive prompts and launches immediately with the last-used agent, model, and gateway.
+- **`9agent models [pattern]`** filters the gateway's model catalog case-insensitively across `id` and `owned_by`. Works in both tab-separated output and `--json`.
+- **Remember `lastAgent`.** Saves the last chosen agent in `~/.config/9agent/config.json` and pre-selects it as the default choice in the interactive agent picker.
+- **Brutalist light landing page.** High-contrast, stark typography, heavy borders, and brutalist card grid layout for https://9agent.piply.xyz/.
+
+## 0.9.1 - 2026-10-21
+
+### Fixed
+
+- **Model search restored.** Restored `@inquirer/prompts` live searchable model picker (`search`) with case-insensitive filtering across model ID and owner, while keeping last-used models sorted first.
+
+## 0.9.0 - 2026-09-25
+
+### Added
+
+- **`9agent gateway list|use|forget`** subcommands to manage saved gateway profiles.
+- **Fuzzy model resolution.** Flag typos resolve to close single matches (e.g. `--model sonnet`).
+- **Gateway-scoped model history.** `lastModels` is now tracked per gateway URL instead of globally.
+
+## 0.8.0 - 2026-09-25
+
+### Added
+
+- **Multi-model support.** Pass comma-separated models via `-m id1,id2` to map to agent model tiers (e.g. Claude Code OPUS, SONNET, HAIKU).
+- **Persistent default gateway.** Automatically remembers the last used gateway URL.
+
 ## 0.7.0 - 2026-09-23
 
 ### Changed

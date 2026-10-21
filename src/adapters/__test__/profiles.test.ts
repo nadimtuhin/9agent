@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveKey, savedKey } from "../../profiles.js";
+import {
+  saveKey, savedKey,
+  getLastAgent, setLastAgent,
+} from "../../profiles.js";
 
 function tempConfig(): string {
   return join(mkdtempSync(join(tmpdir(), "9agent-profiles-")), "nested", "config.json");
@@ -34,5 +37,14 @@ describe("gateway profiles", () => {
     writeFileSync(path, "{ not json");
     assert.throws(() => saveKey("https://a/v1", "k", path), /not valid JSON/);
     assert.equal(readFileSync(path, "utf-8"), "{ not json");
+  });
+
+  it("persists and reads lastAgent", () => {
+    const path = tempConfig();
+    assert.equal(getLastAgent(path), undefined);
+    setLastAgent("claude", path);
+    assert.equal(getLastAgent(path), "claude");
+    setLastAgent("pi", path);
+    assert.equal(getLastAgent(path), "pi");
   });
 });

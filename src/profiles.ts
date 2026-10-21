@@ -6,6 +6,7 @@ export interface Config {
   profiles: Record<string, { key: string }>;
   lastGateway?: string;
   lastModels?: Record<string, string[]>;
+  lastAgent?: string;
 }
 
 export const CONFIG_PATH = join(homedir(), ".config", "9agent", "config.json");
@@ -29,7 +30,12 @@ export function readConfig(path: string): Config {
     } else if (parsed.lastModels !== undefined) {
       lastModels = parsed.lastModels;
     }
-    return { profiles: parsed.profiles ?? {}, lastGateway: parsed.lastGateway, lastModels };
+    return {
+      profiles: parsed.profiles ?? {},
+      lastGateway: parsed.lastGateway,
+      lastModels,
+      lastAgent: typeof parsed.lastAgent === "string" ? parsed.lastAgent : undefined,
+    };
   } catch {
     throw new Error(`${path} is not valid JSON — fix or delete it, then retry.`);
   }
@@ -60,6 +66,16 @@ export function getLastGateway(path: string = CONFIG_PATH): string | undefined {
 export function setLastGateway(gateway: string, path: string = CONFIG_PATH): void {
   const config = readConfig(path);
   config.lastGateway = gateway;
+  writeConfig(path, config);
+}
+
+export function getLastAgent(path: string = CONFIG_PATH): string | undefined {
+  return readConfig(path).lastAgent;
+}
+
+export function setLastAgent(agent: string, path: string = CONFIG_PATH): void {
+  const config = readConfig(path);
+  config.lastAgent = agent;
   writeConfig(path, config);
 }
 

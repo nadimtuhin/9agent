@@ -1,30 +1,24 @@
 import { Command } from "commander";
-import { password, select, search } from "@inquirer/prompts";
+import { select, search } from "@inquirer/prompts";
 import process from "node:process";
 import { createRequire } from "node:module";
 import { discoverModels, awaitModels, filterModels, type ModelEntry } from "./discovery.js";
-import { assertModelExists, parseYes, resolveKey, resolveModelFuzzy } from "./opts.js";
+import { applyLastOpts, assertModelExists, parseYes, resolveKey, resolveModelFuzzy } from "./opts.js";
 import { checkForUpdate, printUpdateNotice } from "./update-check.js";
 import { registerCommands } from "./commands.js";
 import { registerGatewayCommands } from "./gateway.js";
-import { saveKey, savedKey, getLastGateway, setLastGateway, getLastModels, setLastModels } from "./profiles.js";
+import { registerKeyPrompt } from "./key-prompt.js";
+import {
+  savedKey,
+  getLastGateway, setLastGateway,
+  getLastModels, setLastModels,
+  getLastAgent, setLastAgent,
+} from "./profiles.js";
 import { REGISTRY, assertSandboxSupported } from "./adapters/base.js";
-import { aiderAdapter } from "./adapters/aider.js";
-import { claudeAdapter } from "./adapters/claude.js";
-import { clineAdapter } from "./adapters/cline.js";
-import { codexAdapter } from "./adapters/codex.js";
-import { commandCodeAdapter } from "./adapters/commandcode.js";
-import { hermesAdapter } from "./adapters/hermes.js";
-import { jcodeAdapter } from "./adapters/jcode.js";
-import { kilocodeAdapter } from "./adapters/kilocode.js";
-import { opencodeAdapter } from "./adapters/opencode.js";
-import { piAdapter } from "./adapters/pi.js";
+import { ALL_ADAPTERS } from "./adapters/index.js";
 import type { LaunchOptions } from "./adapters/base.js";
 
-REGISTRY.push(
-  aiderAdapter, claudeAdapter, clineAdapter, codexAdapter, commandCodeAdapter,
-  hermesAdapter, jcodeAdapter, kilocodeAdapter, opencodeAdapter, piAdapter,
-);
+REGISTRY.push(...ALL_ADAPTERS);
 
 const program = new Command();
 
@@ -32,6 +26,7 @@ const pkg = createRequire(import.meta.url)("../package.json") as { version: stri
 
 registerCommands(program, pkg);
 registerGatewayCommands(program);
+registerKeyPrompt(program);
 
 program
   .name("9agent")
@@ -39,6 +34,7 @@ program
   .version(pkg.version)
   .option("-a, --agent <name>", "agent name or alias")
   .option("-m, --model <ids>", "model ID(s), comma-separated (skip picker)")
+  .option("-l, --last", "launch with last-used agent, model, and gateway")
   .option("--yolo", "skip permissions / dangerous mode")
   .option("--gateway <url>", "9Router base URL")
   .option("--key", "prompt for this gateway's key and save it to its profile")
@@ -60,6 +56,7 @@ interface ProgramOpts {
   agent?: string;
   model?: string;
   models?: string[];
+  last?: boolean;
   yolo: boolean;
   gateway: string;
   key?: boolean;
@@ -136,6 +133,7 @@ async function main(opts: ProgramOpts) {
 
   const gateway = opts.gateway ?? process.env.NINEROUTER_URL ?? getLastGateway() ?? "http://localhost:20128/v1";
   setLastGateway(gateway);
+  applyLastOpts(opts, gateway);
 
   const options: Omit<ProgramOpts, "key"> & { key: string } = {
     ...opts,
@@ -151,6 +149,7 @@ async function main(opts: ProgramOpts) {
   modelsPromise.catch((_e: unknown) => { void _e; });
 
   const adapter = await resolveAdapter(options.agent);
+  setLastAgent(adapter.name);
 
   if (options.sandbox) assertSandboxSupported(adapter);
 
@@ -174,11 +173,10 @@ async function main(opts: ProgramOpts) {
 }
 
 async function filterInstalled(adapters: typeof REGISTRY) {
-  const result = [];
-  for (const a of adapters) {
-    if (await a.detect()) result.push(a);
-  }
-  return result;
+  const detected = await Promise.all(
+    adapters.map(async (a) => ((await a.detect()) ? a : null)),
+  );
+  return detected.filter((a): a is (typeof adapters)[number] => a !== null);
 }
 
 async function resolveAdapter(agentName?: string) {
@@ -201,6 +199,8 @@ async function resolveAdapter(agentName?: string) {
     if (!process.stdin.isTTY) {
       throw new Error("No TTY — pass --agent <name> to pick an agent.");
     }
+    const last = getLastAgent();
+    const defaultVal = installed.find((a) => a.name === last || a.aliases?.includes(last ?? ""));
     const answer = await select({
       message: "Pick an agent:",
       choices: installed.map((a) => ({
@@ -208,6 +208,7 @@ async function resolveAdapter(agentName?: string) {
         value: a,
         description: a.aliases?.length ? `aliases: ${a.aliases.join(", ")}` : undefined,
       })),
+      default: defaultVal,
     });
     adapter = answer;
   }
@@ -232,48 +233,6 @@ async function resolveYolo(opts: Omit<ProgramOpts, "key"> & { key: string }) {
     return mode;
   }
   return false;
-}
-
-function inlineKeyError(gateway: string): Error {
-  return new Error(
-    "--key no longer takes a value: inline keys land in shell history and get mangled by shell quoting.\n" +
-      `Run \`9agent --gateway ${gateway} --key\` and paste the key at the prompt.`,
-  );
-}
-
-function isSubcommand(word: string): boolean {
-  return word === "help" || program.commands.some((c) => c.name() === word || c.aliases().includes(word));
-}
-
-async function promptForKey() {
-  const { key } = program.opts<{ key?: boolean }>();
-  if (!key) return;
-  const gateway = program.opts<{ gateway?: string }>().gateway ?? process.env.NINEROUTER_URL ?? getLastGateway() ?? "http://localhost:20128/v1";
-  const next = process.argv[process.argv.indexOf("--key") + 1];
-  if (next !== undefined && !next.startsWith("-") && !isSubcommand(next)) {
-    throw inlineKeyError(gateway);
-  }
-  if (!process.stdin.isTTY) {
-    throw new Error("--key needs a terminal to prompt. For non-interactive runs set NINEROUTER_KEY.");
-  }
-  const entered = (await password({ message: `Key for ${gateway}:`, mask: "*" })).trim();
-  if (!entered) throw new Error("No key entered; nothing saved.");
-  saveKey(gateway, entered);
-  console.error(`9agent: saved key for ${gateway}.`);
-}
-
-program.hook("preAction", async () => {
-  try {
-    await promptForKey();
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  }
-});
-
-if (process.argv.some((a) => a.startsWith("--key="))) {
-  console.error(inlineKeyError("<url>").message);
-  process.exit(1);
 }
 
 await program.parseAsync();

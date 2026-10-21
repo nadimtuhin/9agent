@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -176,5 +176,60 @@ describe("models subcommand", () => {
   it("lists models in --help", () => {
     const r = run("--help");
     assert.match(r.stdout, /^\s*models\s/m);
+  });
+
+  it("accepts an optional pattern in models --help", () => {
+    const r = run("models", "--help");
+    assert.match(r.stdout, /models \[options\] \[pattern\]/);
+  });
+});
+
+describe("--last option", () => {
+  it("fails when no previous agent is saved", () => {
+    const r = runIsolated("--last", "--print-only");
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /No previous agent saved/);
+  });
+
+  it("fails when no previous model is saved for the gateway", () => {
+    const home = mkdtempSync(join(tmpdir(), "9agent-last-"));
+    try {
+      const cfgDir = join(home, ".config", "9agent");
+      mkdirSync(cfgDir, { recursive: true });
+      writeFileSync(join(cfgDir, "config.json"), JSON.stringify({
+        lastAgent: "claude",
+        lastGateway: "http://example.com/v1",
+      }));
+      const r = spawnSync(process.execPath, ["--import", "tsx", CLI, "--last", "--print-only"], {
+        encoding: "utf-8",
+        env: { ...process.env, HOME: home },
+      });
+      assert.equal(r.status, 1);
+      assert.match(r.stderr, /No previous model saved/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("launches immediately with saved agent, model, and gateway", () => {
+    const home = mkdtempSync(join(tmpdir(), "9agent-last-"));
+    try {
+      const cfgDir = join(home, ".config", "9agent");
+      mkdirSync(cfgDir, { recursive: true });
+      writeFileSync(join(cfgDir, "config.json"), JSON.stringify({
+        lastAgent: "claude",
+        lastGateway: "http://example.com/v1",
+        lastModels: { "http://example.com/v1": ["mock/model"] },
+      }));
+      const r = spawnSync(process.execPath, ["--import", "tsx", CLI, "--last", "--print-only"], {
+        encoding: "utf-8",
+        env: { ...process.env, HOME: home },
+      });
+      assert.equal(r.status, 0);
+      assert.match(r.stderr, /--- claude dry run ---/);
+      assert.match(r.stderr, /"ANTHROPIC_DEFAULT_OPUS_MODEL": "mock\/model"/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
