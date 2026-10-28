@@ -23,17 +23,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
+          cache: pnpm
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       # Same gate `scripts/release.sh` already ran locally — cheap, and closes
       # the gap where a tag was pushed by hand without it.
-      - run: npm run check
+      - run: pnpm run check
 
       # The tag is the source of truth for what "this release" means; refuse
       # to publish a package.json that disagrees with it.
@@ -46,7 +50,7 @@ jobs:
             exit 1
           fi
 
-      - run: npm run build
+      - run: pnpm run build
 
       # `prepack` would rebuild anyway, but the explicit build above plus
       # `--ignore-scripts` here means CI's own npm config can't silently skip
