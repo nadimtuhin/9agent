@@ -28,8 +28,11 @@ echo "$out"
 grep -q "host.docker.internal:host-gateway" <<<"$out" || { echo "FAIL: sandbox argv missing --add-host"; exit 1; }
 # mock-router is not loopback, so it must pass through UNCHANGED. The
 # loopback->host.docker.internal rewrite is covered by containerizeUrl unit tests.
-grep -q "ANTHROPIC_BASE_URL=http://mock-router:20128/v1" <<<"$out" || { echo "FAIL: non-loopback gateway was rewritten"; exit 1; }
-grep -q "ANTHROPIC_AUTH_TOKEN=…redacted" <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
+grep -q '"ANTHROPIC_BASE_URL": "http://mock-router:20128/v1"' <<<"$out" || { echo "FAIL: non-loopback gateway was rewritten"; exit 1; }
+grep -q '"ANTHROPIC_AUTH_TOKEN": "…redacted"' <<<"$out" || { echo "FAIL: auth token not redacted in --print-only"; exit 1; }
+# Env values never ride on the docker argv (visible in ps); only names do.
+grep -qE -- "-e ANTHROPIC_AUTH_TOKEN( |$)" <<<"$out" || { echo "FAIL: sandbox argv does not pass the token by name"; exit 1; }
+if grep -qE -- "-e ANTHROPIC_AUTH_TOKEN=" <<<"$out"; then echo "FAIL: token value on docker argv"; exit 1; fi
 
 # command-code sandbox --print-only prints image + shadow config path (custom dry-run format)
 out=$(docker compose -f docker-compose.test.yml up --exit-code-from test-command-code-sandbox test-command-code-sandbox 2>&1) || rc=$?

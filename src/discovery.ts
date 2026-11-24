@@ -130,6 +130,51 @@ export async function awaitModels(
   }
 }
 
+export interface DiscoverOpts {
+  cachePath?: string;
+  timeoutMs?: number;
+}
+
+function discoverOpts(cache: string | DiscoverOpts): Required<DiscoverOpts> {
+  const opts = typeof cache === "string" ? { cachePath: cache } : cache;
+  return { cachePath: opts.cachePath ?? CACHE_PATH, timeoutMs: opts.timeoutMs ?? 10_000 };
+}
+
+function isTransient(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+function isTimeout(err: unknown): boolean {
+  return err instanceof Error && err.name === "TimeoutError";
+}
+
+function cacheOrThrowUnreachable(
+  err: unknown,
+  baseUrl: string,
+  { cachePath, timeoutMs }: Required<DiscoverOpts>,
+): ModelEntry[] {
+  const timedOut = isTimeout(err);
+  const what = timedOut
+    ? `${baseUrl}/models timed out after ${timeoutMs}ms`
+    : `cannot reach ${baseUrl}/models`;
+  const cached = serveFromCache(cachePath, `9agent: ${what}`);
+  if (cached) return cached;
+  throw new Error(
+    timedOut
+      ? `${what} and no cached models at ${cachePath}.`
+      : `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
+  );
+}
+
+async function readJson(res: Response, baseUrl: string, timeoutMs: number): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch (err) {
+    if (isTimeout(err)) throw new Error(`${baseUrl}/models timed out after ${timeoutMs}ms`);
+    throw new Error(`${baseUrl}/models returned invalid JSON`);
+  }
+}
+
 function httpError(baseUrl: string, status: number): Error {
   if (status === 401 || status === 403) {
     return new Error(
@@ -143,33 +188,28 @@ function httpError(baseUrl: string, status: number): Error {
 export async function discoverModels(
   baseUrl: string,
   apiKey: string,
-  cachePath: string = CACHE_PATH,
+  cache: string | DiscoverOpts = CACHE_PATH,
 ): Promise<ModelEntry[]> {
+  const { cachePath, timeoutMs } = discoverOpts(cache);
   let res: Response;
   try {
     res = await fetch(`${baseUrl}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
-    const cached = serveFromCache(cachePath, `9agent: cannot reach ${baseUrl}/models`);
-    if (cached) return cached;
-    throw new Error(
-      `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
-    );
+  } catch (err) {
+    return cacheOrThrowUnreachable(err, baseUrl, { cachePath, timeoutMs });
   }
 
-  if (!res.ok && res.status >= 500) {
-    const cached = serveFromCache(cachePath, `9agent: ${baseUrl}/models returned HTTP ${res.status}`);
+  if (!res.ok) {
+    const cached = isTransient(res.status)
+      ? serveFromCache(cachePath, `9agent: ${baseUrl}/models returned HTTP ${res.status}`)
+      : null;
     if (cached) return cached;
+    throw httpError(baseUrl, res.status);
   }
-  if (!res.ok) throw httpError(baseUrl, res.status);
 
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch {
-    throw new Error(`${baseUrl}/models returned invalid JSON`);
-  }
+  const body = await readJson(res, baseUrl, timeoutMs);
 
   const models = parseModels(body, baseUrl);
   writeCache(cachePath, models);

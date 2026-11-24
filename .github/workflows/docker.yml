@@ -8,10 +8,10 @@ name: Docker
 on:
   push:
     branches: [main]
-    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json']
+    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json', 'pnpm-lock.yaml', '.github/workflows/docker.yml']
   pull_request:
     branches: [main]
-    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json']
+    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json', 'pnpm-lock.yaml', '.github/workflows/docker.yml']
 
 jobs:
   docker:
