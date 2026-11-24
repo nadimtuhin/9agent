@@ -111,3 +111,30 @@ describe("printUpdateNotice", () => {
     }
   });
 });
+
+describe("checkForUpdate timeout", () => {
+  it("does not wait forever on a registry that never answers", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "9agent-test-"));
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new Error("aborted"));
+        });
+      })) as typeof fetch;
+    try {
+      const { checkForUpdate } = await import("../../update-check.js");
+      let timer: NodeJS.Timeout | undefined;
+      const result = await Promise.race([
+        checkForUpdate("1.0.0", { skipCache: true, cacheDir: dir, timeoutMs: 100 }),
+        new Promise<"hung">((r) => { timer = setTimeout(() => { r("hung"); }, 2000); }),
+      ]);
+      clearTimeout(timer);
+      assert.notEqual(result, "hung");
+      assert.equal(result === "hung" ? null : result.latest, "1.0.0");
+    } finally {
+      globalThis.fetch = realFetch;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

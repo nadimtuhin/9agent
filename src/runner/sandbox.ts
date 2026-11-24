@@ -111,6 +111,15 @@ export function imageTag(dockerfileContents: string): string {
   return createHash("sha256").update(dockerfileContents).digest("hex").slice(0, 12);
 }
 
+function envArgs(specEnv: Record<string, string>, env: Record<string, string>): string[] {
+  return [
+    ...Object.entries(specEnv)
+      .filter(([k]) => !(k in env))
+      .flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+    ...Object.keys(env).flatMap((k) => ["-e", k]),
+  ];
+}
+
 export function buildSandboxArgs(opts: {
   image: string;
   spec: SandboxSpec;
@@ -155,7 +164,7 @@ export function buildSandboxArgs(opts: {
     ...(gitconfig ? ["-v", `${gitconfig}:${spec.gitconfigTarget}:ro`] : []),
     "-w",
     "/workspace",
-    ...Object.entries({ ...spec.specEnv, ...env }).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+    ...envArgs(spec.specEnv ?? {}, env),
     image,
     bin,
     ...args,
@@ -302,8 +311,9 @@ export async function ensureImage(spec: SandboxSpec, image: string): Promise<voi
 
   console.error(`9agent: building sandbox image ${image} (first run)…`);
   await runHost(
-    "docker",
+    bin,
     [
+      ...prefix,
       "build",
       "-f",
       spec.dockerfile,
@@ -479,5 +489,5 @@ export async function runSandbox(
     ],
   });
   const [dockerBin, ...dockerPrefix] = dockerCommand();
-  await runHost(dockerBin, [...dockerPrefix, ...argv], {});
+  await runHost(dockerBin, [...dockerPrefix, ...argv], env);
 }

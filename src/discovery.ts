@@ -130,6 +130,20 @@ export async function awaitModels(
   }
 }
 
+export interface DiscoverOpts {
+  cachePath?: string;
+  timeoutMs?: number;
+}
+
+function discoverOpts(cache: string | DiscoverOpts): Required<DiscoverOpts> {
+  const opts = typeof cache === "string" ? { cachePath: cache } : cache;
+  return { cachePath: opts.cachePath ?? CACHE_PATH, timeoutMs: opts.timeoutMs ?? 10_000 };
+}
+
+function isTransient(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
 function httpError(baseUrl: string, status: number): Error {
   if (status === 401 || status === 403) {
     return new Error(
@@ -143,12 +157,14 @@ function httpError(baseUrl: string, status: number): Error {
 export async function discoverModels(
   baseUrl: string,
   apiKey: string,
-  cachePath: string = CACHE_PATH,
+  cache: string | DiscoverOpts = CACHE_PATH,
 ): Promise<ModelEntry[]> {
+  const { cachePath, timeoutMs } = discoverOpts(cache);
   let res: Response;
   try {
     res = await fetch(`${baseUrl}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     const cached = serveFromCache(cachePath, `9agent: cannot reach ${baseUrl}/models`);
@@ -158,11 +174,13 @@ export async function discoverModels(
     );
   }
 
-  if (!res.ok && res.status >= 500) {
-    const cached = serveFromCache(cachePath, `9agent: ${baseUrl}/models returned HTTP ${res.status}`);
+  if (!res.ok) {
+    const cached = isTransient(res.status)
+      ? serveFromCache(cachePath, `9agent: ${baseUrl}/models returned HTTP ${res.status}`)
+      : null;
     if (cached) return cached;
+    throw httpError(baseUrl, res.status);
   }
-  if (!res.ok) throw httpError(baseUrl, res.status);
 
   let body: unknown;
   try {

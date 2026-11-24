@@ -13,9 +13,11 @@ interface CacheEntry {
 export type Fetcher = (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
 
 async function fetchLatest(
-  fetcher?: Fetcher,
+  fetcher: Fetcher | undefined,
+  timeoutMs: number,
 ): Promise<string | null> {
-  const fn: Fetcher = fetcher ?? ((url: string) => fetch(url));
+  const fn: Fetcher =
+    fetcher ?? ((url: string) => fetch(url, { signal: AbortSignal.timeout(timeoutMs) }));
   try {
     const res = await fn("https://registry.npmjs.org/9agent/latest");
     if (!res.ok) return null;
@@ -34,7 +36,7 @@ export interface UpdateCheckResult {
 
 export async function checkForUpdate(
   currentVersion: string,
-  opts: { fetcher?: Fetcher; skipCache?: boolean; cacheDir?: string } = {},
+  opts: { fetcher?: Fetcher; skipCache?: boolean; cacheDir?: string; timeoutMs?: number } = {},
 ): Promise<UpdateCheckResult> {
   const cacheDir = opts.cacheDir ?? CACHE_DIR;
   const cacheFile = join(cacheDir, "update-check.json");
@@ -64,7 +66,7 @@ export async function checkForUpdate(
   if (cacheFresh && !opts.skipCache) {
     latest = cached.latest;
   } else {
-    const fetched = await fetchLatest(opts.fetcher);
+    const fetched = await fetchLatest(opts.fetcher, opts.timeoutMs ?? 3_000);
     if (fetched) {
       latest = fetched;
       writeLocal(fetched);

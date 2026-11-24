@@ -12,12 +12,15 @@ writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }])
 
 let server: Server;
 let base: string;
-let mode: "401" | "503" | "html" | "bad-data" | "ok" = "ok";
+let mode: "401" | "429" | "503" | "html" | "bad-data" | "hang" | "ok" = "ok";
 
 before(async () => {
   server = createServer((_req, res) => {
+    if (mode === "hang") return;
     if (mode === "401") {
       res.writeHead(401).end("nope");
+    } else if (mode === "429") {
+      res.writeHead(429).end("slow down");
     } else if (mode === "503") {
       res.writeHead(503).end("upstream down");
     } else if (mode === "html") {
@@ -35,7 +38,17 @@ before(async () => {
   base = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}/v1`;
 });
 
-after(() => server.close());
+after(() => {
+  server.closeAllConnections();
+  server.close();
+});
+
+function captureStderr(): { warnings: string[]; restore: () => void } {
+  const warnings: string[] = [];
+  const original = console.error;
+  console.error = (msg: unknown) => void warnings.push(String(msg));
+  return { warnings, restore: () => { console.error = original; } };
+}
 
 describe("discoverModels", () => {
   it("throws on 401 instead of serving cache", async () => {
@@ -64,6 +77,32 @@ describe("discoverModels", () => {
     const empty = join(CACHE_DIR, "empty503.json");
     writeFileSync(empty, "[]");
     await assert.rejects(() => discoverModels(base, "k", empty), /HTTP 503/);
+  });
+
+  it("falls back to cache on HTTP 429, like any other transient failure", async () => {
+    mode = "429";
+    writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }]));
+    const { warnings, restore } = captureStderr();
+    try {
+      const models = await discoverModels(base, "k", cache);
+      assert.deepEqual(models, [{ id: "cached/model", owned_by: "cache" }]);
+    } finally {
+      restore();
+    }
+    assert.match(warnings.join("\n"), /HTTP 429/);
+  });
+
+  it("gives up on a gateway that never answers and serves the cache", async () => {
+    mode = "hang";
+    writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }]));
+    const { warnings, restore } = captureStderr();
+    try {
+      const models = await discoverModels(base, "k", { cachePath: cache, timeoutMs: 200 });
+      assert.deepEqual(models, [{ id: "cached/model", owned_by: "cache" }]);
+    } finally {
+      restore();
+    }
+    assert.match(warnings.join("\n"), /from cache/);
   });
 
   it("throws a named error on invalid JSON", async () => {

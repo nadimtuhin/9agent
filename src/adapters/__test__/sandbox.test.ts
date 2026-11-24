@@ -1,15 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   assertMountableCwd,
   claudeSpec,
@@ -475,5 +478,102 @@ describe("rewriteAgentPaths", () => {
       rewriteAgentPaths(text, "/Users/me/.claude", "/home/node/.claude"),
       text,
     );
+  });
+});
+
+// runSandbox/ensureImage end in runHost, which calls process.exit, so they run
+// in a child against a fake docker that records its argv and the token it sees.
+describe("runSandbox with a fake docker", () => {
+  const SANDBOX = fileURLToPath(new URL("../../runner/sandbox.ts", import.meta.url));
+  const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+
+  function setup(inspectStatus: number) {
+    const dir = mkdtempSync(join(tmpdir(), "9agent-fakedocker-"));
+    const log = join(dir, "log");
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const fake = (name: string) =>
+      `#!/bin/sh\necho "${name} $* TOKEN=\${ANTHROPIC_AUTH_TOKEN-unset}" >> ${JSON.stringify(log)}\n` +
+      `[ "$1" = image ] && exit ${inspectStatus}\nexit 0\n`;
+    writeFileSync(join(bin, "fake-docker"), fake("fake"), { mode: 0o755 });
+    writeFileSync(join(bin, "docker"), fake("plain-docker"), { mode: 0o755 });
+    writeFileSync(join(dir, "Dockerfile"), "FROM scratch\n");
+    const project = join(dir, "project");
+    mkdirSync(project);
+    return { dir, log, bin, project };
+  }
+
+  function runChild(
+    s: ReturnType<typeof setup>,
+    body: string,
+  ): Promise<string> {
+    const spec = {
+      repo: "9agent/test",
+      dockerfile: join(s.dir, "Dockerfile"),
+      agentHome: join(s.dir, "agent-home"),
+      containerHome: "/home/node/.agent",
+      gitconfigTarget: "/home/node/.gitconfig",
+    };
+    const script =
+      `import { ensureImage, runSandbox } from ${JSON.stringify(SANDBOX)};\n` +
+      `const spec = ${JSON.stringify(spec)};\n` +
+      body;
+    return new Promise((resolve, reject) => {
+      execFile(
+        process.execPath,
+        ["--import", join(ROOT, "node_modules/tsx/dist/esm/index.mjs"), "--input-type=module", "--eval", script],
+        {
+          cwd: s.project,
+          env: {
+            ...process.env,
+            PATH: `${s.bin}:${process.env.PATH ?? ""}`,
+            NINEAGENT_DOCKER_BIN: join(s.bin, "fake-docker"),
+          },
+        },
+        (err, _stdout, stderr) => {
+          if (err) reject(new Error(`${err.message}\n${stderr}`));
+          else resolve(existsSync(s.log) ? readFileSync(s.log, "utf-8") : "");
+        },
+      );
+    });
+  }
+
+  it("builds the image with NINEAGENT_DOCKER_BIN, not a hard-coded docker", async () => {
+    const s = setup(1);
+    const log = await runChild(s, `await ensureImage(spec, "9agent/test:abc");\n`);
+    assert.match(log, /^fake build /m);
+    assert.doesNotMatch(log, /plain-docker/);
+  });
+
+  it("keeps the API key off the docker command line but still hands it to docker", async () => {
+    const s = setup(0);
+    const log = await runChild(
+      s,
+      `await runSandbox(spec, "claude", [], { ANTHROPIC_AUTH_TOKEN: "sk-supersecret" });\n`,
+    );
+    const run = log.split("\n").find((l) => l.startsWith("fake run ")) ?? "";
+    assert.ok(run, `no docker run recorded:\n${log}`);
+    const [argv, seen] = run.split(" TOKEN=");
+    assert.ok(!argv.includes("sk-supersecret"), `token leaked into argv: ${argv}`);
+    assert.match(argv, / -e ANTHROPIC_AUTH_TOKEN /);
+    assert.equal(seen, "sk-supersecret");
+  });
+});
+
+describe("buildSandboxArgs env", () => {
+  it("names caller env vars without their values, so secrets stay out of ps", () => {
+    const argv = buildSandboxArgs({
+      image: "img",
+      spec: SPEC,
+      bin: "claude",
+      args: [],
+      env: { ANTHROPIC_AUTH_TOKEN: "sk-supersecret" },
+      cwd: "/work/proj",
+      tty: false,
+    });
+    assert.ok(!argv.some((a) => a.includes("sk-supersecret")));
+    const i = argv.indexOf("ANTHROPIC_AUTH_TOKEN");
+    assert.notEqual(i, -1);
+    assert.equal(argv[i - 1], "-e");
   });
 });
