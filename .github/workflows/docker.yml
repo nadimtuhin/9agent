@@ -8,19 +8,22 @@ name: Docker
 on:
   push:
     branches: [main]
-    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json']
+    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json', 'pnpm-lock.yaml', '.github/workflows/docker.yml']
   pull_request:
     branches: [main]
-    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json']
+    paths: ['docker/**', 'src/runner/**', 'test/**', 'package.json', 'pnpm-lock.yaml', '.github/workflows/docker.yml']
 
 jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-      - run: npm ci
-      - run: npm run test:docker
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:docker
