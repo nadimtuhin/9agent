@@ -144,6 +144,10 @@ function isTransient(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+function isTimeout(err: unknown): boolean {
+  return err instanceof Error && err.name === "TimeoutError";
+}
+
 function httpError(baseUrl: string, status: number): Error {
   if (status === 401 || status === 403) {
     return new Error(
@@ -166,11 +170,17 @@ export async function discoverModels(
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
-    const cached = serveFromCache(cachePath, `9agent: cannot reach ${baseUrl}/models`);
+  } catch (err) {
+    const timedOut = isTimeout(err);
+    const what = timedOut
+      ? `${baseUrl}/models timed out after ${timeoutMs}ms`
+      : `cannot reach ${baseUrl}/models`;
+    const cached = serveFromCache(cachePath, `9agent: ${what}`);
     if (cached) return cached;
     throw new Error(
-      `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
+      timedOut
+        ? `${baseUrl}/models timed out after ${timeoutMs}ms and no cached models at ${cachePath}.`
+        : `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
     );
   }
 
@@ -185,7 +195,9 @@ export async function discoverModels(
   let body: unknown;
   try {
     body = await res.json();
-  } catch {
+  } catch (err) {
+    // The fetch signal also governs the body read, so a stalled body lands here.
+    if (isTimeout(err)) throw new Error(`${baseUrl}/models timed out after ${timeoutMs}ms`);
     throw new Error(`${baseUrl}/models returned invalid JSON`);
   }
 

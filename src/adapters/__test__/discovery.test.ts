@@ -12,11 +12,16 @@ writeFileSync(cache, JSON.stringify([{ id: "cached/model", owned_by: "cache" }])
 
 let server: Server;
 let base: string;
-let mode: "401" | "429" | "503" | "html" | "bad-data" | "hang" | "ok" = "ok";
+let mode: "401" | "429" | "503" | "html" | "bad-data" | "hang" | "stall-body" | "ok" = "ok";
 
 before(async () => {
   server = createServer((_req, res) => {
     if (mode === "hang") return;
+    if (mode === "stall-body") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write('{"data": [');
+      return;
+    }
     if (mode === "401") {
       res.writeHead(401).end("nope");
     } else if (mode === "429") {
@@ -103,6 +108,31 @@ describe("discoverModels", () => {
       restore();
     }
     assert.match(warnings.join("\n"), /from cache/);
+  });
+
+  it("says the gateway timed out, not that it is unreachable, when nothing is cached", async () => {
+    mode = "hang";
+    const missing = join(CACHE_DIR, "no-such-cache.json");
+    await assert.rejects(
+      () => discoverModels(base, "k", { cachePath: missing, timeoutMs: 200 }),
+      (err: Error) => {
+        assert.match(err.message, /timed out after 200ms/);
+        assert.doesNotMatch(err.message, /Is 9Router running/);
+        return true;
+      },
+    );
+  });
+
+  it("reports a body that stalls past the timeout as a timeout, not invalid JSON", async () => {
+    mode = "stall-body";
+    await assert.rejects(
+      () => discoverModels(base, "k", { cachePath: cache, timeoutMs: 200 }),
+      (err: Error) => {
+        assert.match(err.message, /timed out after 200ms/);
+        assert.doesNotMatch(err.message, /invalid JSON/);
+        return true;
+      },
+    );
   });
 
   it("throws a named error on invalid JSON", async () => {
