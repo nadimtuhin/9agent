@@ -148,6 +148,33 @@ function isTimeout(err: unknown): boolean {
   return err instanceof Error && err.name === "TimeoutError";
 }
 
+function cacheOrThrowUnreachable(
+  err: unknown,
+  baseUrl: string,
+  { cachePath, timeoutMs }: Required<DiscoverOpts>,
+): ModelEntry[] {
+  const timedOut = isTimeout(err);
+  const what = timedOut
+    ? `${baseUrl}/models timed out after ${timeoutMs}ms`
+    : `cannot reach ${baseUrl}/models`;
+  const cached = serveFromCache(cachePath, `9agent: ${what}`);
+  if (cached) return cached;
+  throw new Error(
+    timedOut
+      ? `${what} and no cached models at ${cachePath}.`
+      : `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
+  );
+}
+
+async function readJson(res: Response, baseUrl: string, timeoutMs: number): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch (err) {
+    if (isTimeout(err)) throw new Error(`${baseUrl}/models timed out after ${timeoutMs}ms`);
+    throw new Error(`${baseUrl}/models returned invalid JSON`);
+  }
+}
+
 function httpError(baseUrl: string, status: number): Error {
   if (status === 401 || status === 403) {
     return new Error(
@@ -171,17 +198,7 @@ export async function discoverModels(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
-    const timedOut = isTimeout(err);
-    const what = timedOut
-      ? `${baseUrl}/models timed out after ${timeoutMs}ms`
-      : `cannot reach ${baseUrl}/models`;
-    const cached = serveFromCache(cachePath, `9agent: ${what}`);
-    if (cached) return cached;
-    throw new Error(
-      timedOut
-        ? `${baseUrl}/models timed out after ${timeoutMs}ms and no cached models at ${cachePath}.`
-        : `Cannot reach ${baseUrl}/models and no cached models at ${cachePath}. Is 9Router running?`,
-    );
+    return cacheOrThrowUnreachable(err, baseUrl, { cachePath, timeoutMs });
   }
 
   if (!res.ok) {
@@ -192,14 +209,7 @@ export async function discoverModels(
     throw httpError(baseUrl, res.status);
   }
 
-  let body: unknown;
-  try {
-    body = await res.json();
-  } catch (err) {
-    // The fetch signal also governs the body read, so a stalled body lands here.
-    if (isTimeout(err)) throw new Error(`${baseUrl}/models timed out after ${timeoutMs}ms`);
-    throw new Error(`${baseUrl}/models returned invalid JSON`);
-  }
+  const body = await readJson(res, baseUrl, timeoutMs);
 
   const models = parseModels(body, baseUrl);
   writeCache(cachePath, models);
