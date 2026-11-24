@@ -11,6 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { isIPv4 } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,7 +64,7 @@ export function containerizeUrl(url: string): string {
     return url;
   }
   const host = parsed.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
-  const isLoopback = LOOPBACK.has(host) || host.startsWith("127.");
+  const isLoopback = LOOPBACK.has(host) || (isIPv4(host) && host.startsWith("127."));
   if (!isLoopback) return url;
   parsed.hostname = HOST_ALIAS;
   return parsed.toString();

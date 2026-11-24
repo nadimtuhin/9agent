@@ -67,6 +67,16 @@ describe("containerizeUrl", () => {
     assert.equal(containerizeUrl(remote), remote);
   });
 
+  it("does not treat DNS names that start with 127. as loopback", () => {
+    for (const remote of ["https://127.example.com/v1", "http://127.0.0.1.nip.io:20128/v1"]) {
+      assert.equal(containerizeUrl(remote), remote);
+    }
+    assert.equal(
+      containerizeUrl("http://127.0.0.2:20128/v1"),
+      "http://host.docker.internal:20128/v1",
+    );
+  });
+
   it("does not rewrite 'localhost' outside the authority", () => {
     // A regex-based rewrite (what the 9pi wrapper does) corrupts this.
     assert.equal(
